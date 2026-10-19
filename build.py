@@ -13,7 +13,7 @@ has_cfg = bool(re.search(r'^window\.FIREBASE_CONFIG\s*=\s*\{', cfg, re.M))
 SDK = ''.join(f'<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-{n}-compat.js"></script>\n'
               for n in ('app', 'auth', 'firestore'))
 
-body_html = f'''<header class="top"><strong class="brand"><img class="logo" alt="TizonHealth" src="data:image/png;base64,{logo}"><span>סוויטת ייעוץ עסקי<small>The Architecture of Vitality</small></span></strong><nav id="nav"></nav></header>
+body_html = f'''<header class="top"><strong class="brand"><img class="logo" alt="TizonHealth" src="data:image/png;base64,{logo}"><span>יועץ עסקי<small>The Architecture of Vitality</small></span></strong><nav id="nav"></nav></header>
 <main id="view"></main>
 <dialog id="dlg"></dialog>'''
 
@@ -26,12 +26,12 @@ def page(with_cloud):
 
 def full(inner):
     return ('<!doctype html>\n<html lang="he" dir="rtl">\n<head>\n<meta charset="utf-8">\n'
-            '<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>סוויטת ייעוץ עסקי</title>\n</head>\n<body>\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>יועץ עסקי</title>\n</head>\n<body>\n'
             + inner + '</body>\n</html>\n')
 
 os.makedirs('dist', exist_ok=True)
 html = full(page(True))
 open('dist/index.html', 'w', encoding='utf-8').write(html)
 open('standalone.html', 'w', encoding='utf-8').write(html)
-open('artifact.html', 'w', encoding='utf-8').write('<title>סוויטת ייעוץ עסקי</title>\n' + page(False))
+open('artifact.html', 'w', encoding='utf-8').write('<title>יועץ עסקי</title>\n' + page(False))
 print('cloud mode:', 'on' if has_cfg else 'off (firebase-config.js is empty)')

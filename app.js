@@ -1,6 +1,6 @@
 'use strict';
 document.documentElement.lang = 'he'; document.documentElement.dir = 'rtl';
-/* סוויטת ייעוץ עסקי. ללא הגדרת Firebase הנתונים נשמרים ב-localStorage; עם הגדרה (cloud.js) יש התחברות, שמירה בענן ושוק משותף. */
+/* יועץ עסקי. ללא הגדרת Firebase הנתונים נשמרים ב-localStorage; עם הגדרה (cloud.js) יש התחברות, שמירה בענן ושוק משותף. */
 const Cloud = window.Cloud || { enabled: false };
 let me = null; // המשתמש המחובר (מצב ענן)
 let M = []; // בקשות השוק המשותף (מצב ענן)
