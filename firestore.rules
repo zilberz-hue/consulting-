@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function requestOwner(rid) {
+      return get(/databases/$(db)/documents/requests/$(rid)).data.ownerUid == request.auth.uid;
+    }
+
+    // סביבת עבודה אישית: רק הבעלים קורא וכותב
+    match /workspaces/{uid} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['json', 'writer', 'updatedAt'])
+        && request.resource.data.json is string
+        && request.resource.data.json.size() < 900000;
+    }
+
+    // שוק ייעוץ: כל משתמש מחובר רואה בקשות; הצעות מחיר גלויות רק לבעל הבקשה ולמגיש
+    match /requests/{rid} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['ownerUid', 'ownerName', 'title', 'area', 'budget', 'desc', 'clientLabel', 'accepted', 'createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.accepted == null
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 200
+        && request.resource.data.desc is string && request.resource.data.desc.size() <= 4000
+        && request.resource.data.budget is number;
+      // הבעלים רשאי רק לסמן הצעה שנבחרה
+      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['accepted'])
+        && request.resource.data.accepted is string;
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /quotes/{qid} {
+        allow read: if signedIn() && (qid == request.auth.uid || requestOwner(rid));
+        allow create, update: if signedIn() && qid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['consultantUid', 'consultant', 'price', 'days', 'msg', 'updatedAt'])
+          && request.resource.data.consultantUid == request.auth.uid
+          && request.resource.data.price is number && request.resource.data.price > 0
+          && request.resource.data.consultant is string && request.resource.data.consultant.size() <= 120
+          && request.resource.data.msg is string && request.resource.data.msg.size() <= 2000
+          && get(/databases/$(db)/documents/requests/$(rid)).data.accepted == null
+          && !requestOwner(rid);
+        allow delete: if signedIn() && (qid == request.auth.uid || requestOwner(rid));
+      }
+    }
+  }
+}

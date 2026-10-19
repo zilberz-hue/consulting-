@@ -7,7 +7,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,"Seg
 .brand{display:flex;align-items:center;gap:10px;font-size:18px}
 .logo{height:44px;width:auto;background:#fff;border-radius:10px;padding:3px 8px}
 .brand small{display:block;font-weight:400;font-size:12px;color:var(--mut)}
-nav{display:flex;gap:4px;flex-wrap:wrap}
+nav{display:flex;gap:4px;flex-wrap:wrap;flex:1;align-items:center}
 nav a{padding:6px 12px;border-radius:8px;color:var(--mut);text-decoration:none}
 nav a.on{background:var(--pri);color:var(--on-pri)}
 main{max-width:1100px;margin:0 auto;padding:16px}
@@ -42,3 +42,5 @@ textarea{min-height:70px}
 .swot{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 svg{max-width:100%;height:auto}
 @media print{.top,.no-print,button{display:none!important}body{background:#fff;color:#000}.card{border-color:#999;break-inside:avoid}}
+.who{margin-inline-start:auto;display:flex;gap:8px;align-items:center;color:var(--mut);font-size:13px}
+.login{max-width:420px;margin:40px auto}.err{min-height:1.2em;margin:8px 0 0;font-size:14px}

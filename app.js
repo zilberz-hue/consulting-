@@ -1,6 +1,10 @@
 'use strict';
 document.documentElement.lang = 'he'; document.documentElement.dir = 'rtl';
-/* סוויטת ייעוץ עסקי — אפליקציה סטטית, הנתונים נשמרים ב-localStorage בלבד. */
+/* סוויטת ייעוץ עסקי. ללא הגדרת Firebase הנתונים נשמרים ב-localStorage; עם הגדרה (cloud.js) יש התחברות, שמירה בענן ושוק משותף. */
+const Cloud = window.Cloud || { enabled: false };
+let me = null; // המשתמש המחובר (מצב ענן)
+let M = []; // בקשות השוק המשותף (מצב ענן)
+let loading = Cloud.enabled;
 
 const KEY = 'consulting-suite-v1';
 const $ = (s) => document.querySelector(s);
@@ -17,8 +21,18 @@ const empty = () => ({
   settings: { rate: 400 },
 });
 let S;
-try { S = Object.assign(empty(), JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { S = empty(); }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage blocked */ } };
+const readLocal = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } };
+S = Cloud.enabled ? empty() : Object.assign(empty(), readLocal() || {});
+const privateState = () => { const { requests, ...rest } = S; return rest; };
+const setSaveState = (st, err) => {
+  const el = $('#sv'); if (!el) return;
+  el.textContent = st === 'saving' ? 'שומר…' : st === 'saved' ? 'נשמר ✓' : 'שגיאת שמירה';
+  el.title = err || ''; el.style.color = st === 'error' ? 'var(--bad)' : '';
+};
+const save = () => {
+  if (Cloud.enabled) { if (me) Cloud.queueSave(me.uid, privateState(), setSaveState); return; }
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage blocked */ }
+};
 const by = (list, id) => list.find((x) => x.id === id);
 const clientName = (id) => by(S.clients, id)?.name || '—';
 const projectName = (id) => by(S.projects, id)?.name || '—';
@@ -76,11 +90,33 @@ const VIEWS = {
   market: ['שוק ייעוץ', market],
 };
 function render() {
+  if (Cloud.enabled && (loading || !me)) {
+    $('#nav').innerHTML = '';
+    $('#view').innerHTML = loading ? '<div class="empty">טוען…</div>' : loginView();
+    return;
+  }
   const id = (location.hash || '#dashboard').slice(1);
   const [, fn] = VIEWS[id] || VIEWS.dashboard;
-  $('#nav').innerHTML = Object.entries(VIEWS).map(([k, [t]]) => `<a href="#${k}" class="${k === id ? 'on' : ''}">${t}</a>`).join('');
+  const who = Cloud.enabled ? `<span class="who">${esc(me.email)} · <small id="sv"></small> <button class="sm" data-do="logout">יציאה</button></span>` : '';
+  $('#nav').innerHTML = Object.entries(VIEWS).map(([k, [t]]) => `<a href="#${k}" class="${k === id ? 'on' : ''}">${t}</a>`).join('') + who;
   $('#view').innerHTML = fn();
 }
+function loginView() {
+  return `<div class="card login"><h1>כניסה למערכת</h1>
+  <form id="lf"><label for="em">מייל</label><input id="em" type="email" autocomplete="email" required>
+  <label for="pw">סיסמה</label><input id="pw" type="password" autocomplete="current-password" minlength="6">
+  <p id="lerr" class="err" role="alert"></p>
+  <div class="row"><button class="pri">כניסה</button><button type="button" data-do="signup">הרשמה</button><button type="button" data-do="forgot">שכחתי סיסמה</button></div></form>
+  <div class="row"><button type="button" data-do="googleIn">כניסה עם Google</button></div></div>`;
+}
+const authMsg = (t, ok) => { const e = $('#lerr'); if (e) { e.textContent = t; e.style.color = ok ? 'var(--ok)' : 'var(--bad)'; } };
+const creds = () => [($('#em')?.value || '').trim(), $('#pw')?.value || ''];
+document.addEventListener('submit', async (ev) => {
+  if (ev.target.id !== 'lf') return;
+  ev.preventDefault();
+  const [em, pw] = creds(); const r = await Cloud.signIn(em, pw);
+  if (!r.ok) authMsg(r.error);
+});
 addEventListener('hashchange', render);
 document.addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-do]');
@@ -97,7 +133,7 @@ function dashboard() {
     ${stat(S.clients.length, 'לקוחות')}${stat(S.projects.filter((p) => p.status === 'פעיל').length, 'פרויקטים פעילים')}
     ${stat(money(unbilled), 'שעות שטרם חויבו')}${stat(money(open), 'חשבוניות פתוחות')}${stat(money(paid), 'הכנסות ששולמו')}
   </div><div class="card" style="margin-top:16px"><h2>משימות קרובות</h2>${due.length ? `<table>${due.map((t) => `<tr><td>${esc(t.title)}</td><td class="muted">${esc(projectName(t.project))}</td><td>${esc(t.due || '')}</td></tr>`).join('')}</table>` : '<div class="empty">אין משימות פתוחות</div>'}</div>
-  <div class="card no-print"><h2>גיבוי נתונים</h2><p class="muted">הנתונים נשמרים בדפדפן הזה בלבד. מומלץ לייצא גיבוי מדי פעם.</p>
+  <div class="card no-print"><h2>גיבוי נתונים</h2><p class="muted">${Cloud.enabled ? 'הנתונים נשמרים בחשבון שלך בענן ומסונכרנים בין מכשירים. גיבוי JSON הוא אופציונלי.' : 'הנתונים נשמרים בדפדפן הזה בלבד. מומלץ לייצא גיבוי מדי פעם.'}</p>
   <button data-do="export">ייצוא JSON</button> <button data-do="import">ייבוא JSON</button> <button class="del" data-do="reset">איפוס הכול</button></div>`;
 }
 const stat = (v, l) => `<div class="stat"><b>${esc(v)}</b><span>${esc(l)}</span></div>`;
@@ -223,7 +259,8 @@ const PLAN_F = () => [{ k: 'cash', label: 'מזומן פתיחה (₪)', type: '
 
 /* ---------- שוק ייעוץ ---------- */
 const AREA_OPTS = [...Object.keys(AREAS), 'אחר'].map((a) => [a, a]);
-function market() {
+function market() { return Cloud.enabled ? marketCloud() : marketLocal(); }
+function marketLocal() {
   return `<h1>שוק ייעוץ</h1><p class="muted">לקוח מתאר צורך, יועצים מגישים הצעות מחיר, והלקוח בוחר. (הדגמה מקומית — ללא שרת)</p>
   <div class="bar"><span></span><button class="pri" data-do="reqNew">+ בקשת ייעוץ</button></div>
   ${S.requests.length ? S.requests.map((r) => {
@@ -234,7 +271,31 @@ function market() {
     <td>${r.accepted === x.id ? '<span class="tag ok">נבחרה</span>' : r.accepted ? '' : `<button class="sm pri" data-do="quoteAccept" data-id="${r.id}" data-q="${x.id}">אישור</button>`}</td></tr>`).join('')}</table></div>` : '<div class="empty">עדיין אין הצעות</div>'}</div>`;
   }).join('') : '<div class="card empty">אין בקשות ייעוץ</div>'}`;
 }
+
+/* שוק משותף (מצב ענן): הבעלים רואה את כל ההצעות, יועץ רואה רק את ההצעה שלו */
+function marketCloud() {
+  const mine = M.filter((r) => r.ownerUid === me.uid); const others = M.filter((r) => r.ownerUid !== me.uid);
+  const status = (r) => `<span class="tag ${r.accepted ? 'ok' : ''}">${r.accepted ? 'נבחרה הצעה' : 'פתוחה'}</span>`;
+  const meta = (r) => `${esc(r.area)} · תקציב ${money(r.budget)} · ${esc(r.clientLabel || r.ownerName)}`;
+  const mineCard = (r) => {
+    const q = r.quotes; const min = q.length ? Math.min(...q.map((x) => x.price)) : 0;
+    return `<div class="card"><div class="bar"><div><h2 style="margin:0">${esc(r.title)} ${status(r)}</h2><span class="muted">${meta(r)}</span></div>
+    <button class="sm del" data-do="reqDel" data-id="${r.id}">מחיקה</button></div><p>${esc(r.desc)}</p>
+    ${q.length ? `<div class="scroll"><table><tr><th>יועץ</th><th>מחיר</th><th>ימים</th><th>הודעה</th><th></th></tr>${q.map((x) => `<tr><td>${esc(x.consultant)}${x.price === min ? ' <span class="tag ok">הזול ביותר</span>' : ''}</td><td>${money(x.price)}</td><td>${num(x.days)}</td><td>${esc(x.msg)}</td>
+    <td>${r.accepted === x.consultantUid ? '<span class="tag ok">נבחרה</span>' : r.accepted ? '' : `<button class="sm pri" data-do="quoteAccept" data-id="${r.id}" data-q="${esc(x.consultantUid)}">אישור</button>`}</td></tr>`).join('')}</table></div>` : '<div class="empty">עדיין אין הצעות</div>'}</div>`;
+  };
+  const otherCard = (r) => {
+    const q = r.quotes[0]; const won = r.accepted && r.accepted === me.uid;
+    return `<div class="card"><div class="bar"><div><h2 style="margin:0">${esc(r.title)} ${status(r)}</h2><span class="muted">${meta(r)}</span></div>
+    <span>${r.accepted ? '' : `<button class="sm pri" data-do="quoteNew" data-id="${r.id}">${q ? 'עדכון הצעה' : 'הגשת הצעה'}</button>`} ${q && !r.accepted ? `<button class="sm del" data-do="quoteDel" data-id="${r.id}">משיכה</button>` : ''}</span></div>
+    <p>${esc(r.desc)}</p>${q ? `<p class="muted">ההצעה שלך: ${money(q.price)} · ${num(q.days)} ימים ${won ? '<span class="tag ok">נבחרה!</span>' : ''}</p>` : ''}</div>`;
+  };
+  return `<h1>שוק ייעוץ</h1><p class="muted">מפרסמים בקשת ייעוץ ומקבלים הצעות מחיר, או מגישים הצעה לבקשות של אחרים. הצעות המחיר גלויות רק לבעל הבקשה ולמגיש.</p>
+  <div class="bar"><h2>הבקשות שלי</h2><button class="pri" data-do="reqNew">+ בקשת ייעוץ</button></div>${mine.length ? mine.map(mineCard).join('') : '<div class="card empty">לא פרסמת בקשות</div>'}
+  <h2>בקשות של אחרים</h2>${others.length ? others.map(otherCard).join('') : '<div class="card empty">אין בקשות פתוחות</div>'}`;
+}
 const REQ_F = () => [{ k: 'title', label: 'כותרת הבקשה' }, { k: 'client', label: 'לקוח', type: 'select', opts: clientOpts() }, { k: 'area', label: 'תחום', type: 'select', opts: AREA_OPTS }, { k: 'budget', label: 'תקציב (₪)', type: 'number' }, { k: 'desc', label: 'תיאור הצורך', type: 'textarea' }];
+const REQ_CLOUD_F = () => [{ k: 'title', label: 'כותרת הבקשה' }, { k: 'clientLabel', label: 'שם העסק (יוצג ליועצים)' }, { k: 'area', label: 'תחום', type: 'select', opts: AREA_OPTS }, { k: 'budget', label: 'תקציב (₪)', type: 'number' }, { k: 'desc', label: 'תיאור הצורך', type: 'textarea' }];
 const QUOTE_F = [{ k: 'consultant', label: 'שם היועץ' }, { k: 'price', label: 'מחיר (₪)', type: 'number' }, { k: 'days', label: 'ימי עבודה', type: 'number' }, { k: 'msg', label: 'הודעה ללקוח', type: 'textarea' }];
 
 /* ---------- פעולות ---------- */
@@ -281,17 +342,58 @@ const ACTIONS = {
     const csv = 'חודש,הכנסה,רווח גולמי,רווח נקי,יתרת מזומן\n' + rows.map((r) => [r.m, r.rev, r.gross, r.net, r.cash].map((n) => Math.round(n)).join(',')).join('\n');
     textBox('ייצוא CSV', csv, 'העתק והדבק ב-Excel או Google Sheets.');
   },
-  reqNew: () => form('בקשת ייעוץ חדשה', REQ_F(), { area: 'אסטרטגיה' }, (v) => { if (v.title) S.requests.push({ id: uid(), quotes: [], accepted: null, ...v }); }),
-  reqDel: (id) => delFrom(S.requests, id),
-  quoteNew: (id) => form('הצעת מחיר', QUOTE_F, null, (v) => { if (v.consultant && v.price > 0) by(S.requests, id).quotes.push({ id: uid(), ...v }); }),
-  quoteAccept: (id, d) => {
-    const r = by(S.requests, id); const q = r.quotes.find((x) => x.id === d.q);
-    ask(`לאשר את ההצעה של ${q.consultant}? ייווצר גם פרויקט חדש.`, () => { r.accepted = q.id; S.projects.push({ id: uid(), name: r.title, client: r.client, status: 'פעיל', budget: q.price }); save(); render(); });
+  reqNew: () => (Cloud.enabled
+    ? form('בקשת ייעוץ חדשה', REQ_CLOUD_F(), { area: 'אסטרטגיה' }, async (v) => { if (v.title) { const r = await Cloud.createRequest(me, v); if (!r.ok) note(r.error); } })
+    : form('בקשת ייעוץ חדשה', REQ_F(), { area: 'אסטרטגיה' }, (v) => { if (v.title) S.requests.push({ id: uid(), quotes: [], accepted: null, ...v }); })),
+  reqDel: (id) => (Cloud.enabled
+    ? ask('למחוק את הבקשה ואת כל ההצעות עליה?', async () => { const r = await Cloud.deleteRequest(id); if (!r.ok) note(r.error); })
+    : delFrom(S.requests, id)),
+  quoteNew: (id) => {
+    const mineQ = Cloud.enabled ? by(M, id)?.quotes[0] : null;
+    form('הצעת מחיר', QUOTE_F, mineQ || { consultant: Cloud.enabled ? me.name : '' }, async (v) => {
+      if (!(v.consultant && v.price > 0)) return;
+      if (Cloud.enabled) { const r = await Cloud.submitQuote(me, id, v); if (!r.ok) note(r.error); } else by(S.requests, id).quotes.push({ id: uid(), ...v });
+    });
   },
+  quoteDel: (id) => ask('למשוך את ההצעה?', async () => { const r = await Cloud.withdrawQuote(me, id); if (!r.ok) note(r.error); }),
+  quoteAccept: (id, d) => {
+    const r = Cloud.enabled ? by(M, id) : by(S.requests, id);
+    const q = Cloud.enabled ? r.quotes.find((x) => x.consultantUid === d.q) : r.quotes.find((x) => x.id === d.q);
+    ask(`לאשר את ההצעה של ${q.consultant}? ייווצר גם פרויקט חדש.`, async () => {
+      if (Cloud.enabled) {
+        const res = await Cloud.acceptQuote(id, q.consultantUid); if (!res.ok) return note(res.error);
+        S.projects.push({ id: uid(), name: r.title, client: '', status: 'פעיל', budget: q.price });
+      } else { r.accepted = q.id; S.projects.push({ id: uid(), name: r.title, client: r.client, status: 'פעיל', budget: q.price }); }
+      save(); render();
+    });
+  },
+  logout: async () => { await Cloud.signOut(); },
+  signup: async () => { const [em, pw] = creds(); const r = await Cloud.signUp(em, pw); if (!r.ok) authMsg(r.error); },
+  googleIn: async () => { const r = await Cloud.google(); if (!r.ok) authMsg(r.error); },
+  forgot: async () => { const [em] = creds(); if (!em) return authMsg('יש להזין מייל'); const r = await Cloud.reset(em); authMsg(r.ok ? 'נשלח מייל לאיפוס סיסמה' : r.error, r.ok); },
   export: () => textBox('גיבוי נתונים', JSON.stringify(S), 'העתק ושמור את הטקסט בקובץ. לשחזור השתמש ב״ייבוא״.'),
   import: () => show('<form method="dialog"><h2>ייבוא גיבוי</h2><p class="muted">הדבק כאן את טקסט הגיבוי. הנתונים הנוכחיים יוחלפו.</p><textarea id="imp" style="min-height:160px;direction:ltr"></textarea><div class="row"><button class="pri" value="ok">ייבוא</button><button value="cancel" formnovalidate>ביטול</button></div></form>', (d) => {
     d.querySelector('form').onsubmit = (ev) => { if (ev.submitter?.value !== 'ok') return; try { S = Object.assign(empty(), JSON.parse(d.querySelector('#imp').value)); save(); render(); } catch { setTimeout(() => note('הטקסט אינו גיבוי תקין'), 0); } };
   }),
   reset: () => ask('למחוק את כל הנתונים?', () => { S = empty(); save(); render(); }),
 };
+/* ---------- הפעלה ---------- */
+if (Cloud.enabled) {
+  window.addEventListener('pagehide', () => Cloud.flush());
+  Cloud.init(async (user) => {
+    if (!user) { me = null; S = empty(); M = []; Cloud.stopMarket(); loading = false; return render(); }
+    me = user; loading = true; render();
+    try {
+      let data = await Cloud.loadWorkspace(user.uid);
+      if (!data) { // כניסה ראשונה: מעבירים נתונים שנשמרו מקומית בדפדפן הזה, אם יש
+        data = readLocal() || {};
+        if (Object.keys(data).length) { S = Object.assign(empty(), data); save(); try { localStorage.removeItem(KEY); } catch { /* ignore */ } }
+      }
+      S = Object.assign(empty(), data);
+      Cloud.watchWorkspace(user.uid, (remote) => { S = Object.assign(empty(), remote); render(); });
+      Cloud.watchRequests(user.uid, (list) => { M = list; if (location.hash === '#market') render(); });
+    } catch (e) { note('שגיאה בטעינת הנתונים: ' + (e.message || e)); }
+    loading = false; render();
+  });
+}
 render();
