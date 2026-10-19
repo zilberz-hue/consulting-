@@ -1,0 +1,8 @@
+[build]
+  command = "python3 build.py"
+  publish = "dist"
+
+[build.environment]
+  # הגדרת ה-Web של Firebase היא מזהה ציבורי (כל אתר שמשתמש ב-Firebase חושף אותה בדפדפן).
+  # האבטחה האמיתית נמצאת ב-firestore.rules. הערכים האלה בלבד מוחרגים מסריקת הסודות; הסריקה נשארת פעילה לכל השאר.
+  SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "AIzaSyDgaDvYjWaQ4EyJJySj2KTTx2Z4uRfX-pI,tizonconsultant,tizonconsultant.firebaseapp.com,tizonconsultant.firebasestorage.app,909112495259,1:909112495259:web:c7034f319044ae85a70a3e"
