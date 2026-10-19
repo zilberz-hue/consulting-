@@ -97,9 +97,11 @@ function render() {
   }
   const id = (location.hash || '#dashboard').slice(1);
   const [, fn] = VIEWS[id] || VIEWS.dashboard;
-  const who = Cloud.enabled ? `<span class="who">${esc(me.email)} · <small id="sv"></small> <button class="sm" data-do="logout">יציאה</button></span>` : '';
+  const help = '<button class="sm" data-do="tourStart">הדרכה</button>';
+  const who = `<span class="who">${Cloud.enabled ? `${esc(me.email)} · <small id="sv"></small> ` : ''}${help}${Cloud.enabled ? ' <button class="sm" data-do="logout">יציאה</button>' : ''}</span>`;
   $('#nav').innerHTML = Object.entries(VIEWS).map(([k, [t]]) => `<a href="#${k}" class="${k === id ? 'on' : ''}">${t}</a>`).join('') + who;
   $('#view').innerHTML = fn();
+  tourRender();
 }
 function loginView() {
   return `<div class="card login"><h1>כניסה למערכת</h1>
@@ -368,6 +370,10 @@ const ACTIONS = {
     });
   },
   logout: async () => { await Cloud.signOut(); },
+  tourStart: () => tourStart(),
+  tourNext: () => tourNext(),
+  tourBack: () => tourBack(),
+  tourFinish: () => tourFinish(),
   signup: async () => { const [em, pw] = creds(); const r = await Cloud.signUp(em, pw); if (!r.ok) authMsg(r.error); },
   googleIn: async () => { const r = await Cloud.google(); if (!r.ok) authMsg(r.error); },
   forgot: async () => { const [em] = creds(); if (!em) return authMsg('יש להזין מייל'); const r = await Cloud.reset(em); authMsg(r.ok ? 'נשלח מייל לאיפוס סיסמה' : r.error, r.ok); },
@@ -377,11 +383,80 @@ const ACTIONS = {
   }),
   reset: () => ask('למחוק את כל הנתונים?', () => { S = empty(); save(); render(); }),
 };
+/* ---------- הדרכה אינטראקטיבית ---------- */
+/* מתחילה אוטומטית למשתמש חדש (בלי לקוחות ופרויקטים), וניתנת להפעלה מחדש בכפתור "הדרכה".
+   שלבי פעולה מתקדמים לבד כשהמשתמש מבצע אותם; אפשר לדלג על כל שלב. הסטטוס נשמר ב-S.settings.tourDone (מסונכרן בענן). */
+const curView = () => (location.hash || '#dashboard').slice(1);
+const navTo = (v) => `a[href="#${v}"]`;
+const TOUR = [
+  { title: 'ברוכים הבאים ליועץ עסקי', text: 'הדרכה קצרה של כ-3 דקות: ניצור לקוח ופרויקט, נרשום שעות ונפיק חשבונית, ונכיר את האבחון, התחזית והשוק. אפשר לצאת בכל רגע.' },
+  { go: 'dashboard', target: '#view .grid', title: 'לוח הבקרה', text: 'כאן רואים במבט אחד כמה לקוחות ופרויקטים פעילים, כמה שעות עוד לא חויבו, מה פתוח לגבייה ומה כבר שולם.' },
+  { target: navTo('clients'), title: 'לקוחות ופרויקטים', text: 'כל מודול נמצא בלשונית משלו. לחץ על "לקוחות ופרויקטים".', done: () => curView() === 'clients' },
+  { target: '[data-do=clientNew]', title: 'הוספת לקוח', text: 'לחץ על "+ לקוח", הקלד שם ושמור.', snap: () => S.clients.length, done: (b) => S.clients.length > b },
+  { target: '[data-do=projectNew]', title: 'הוספת פרויקט', text: 'כל עבודה שייכת לפרויקט של לקוח. לחץ על "+ פרויקט", בחר את הלקוח ושמור.', snap: () => S.projects.length, done: (b) => S.projects.length > b },
+  { target: navTo('tasks'), title: 'משימות', text: 'עכשיו למשימות. לחץ על לשונית "משימות".', done: () => curView() === 'tasks' },
+  { target: '[data-do=taskNew]', title: 'משימה ראשונה', text: 'הוסף משימה עם תאריך יעד. משימות שעבר מועדן יסומנו באדום, והקרובות ביותר מופיעות בלוח הבקרה.', snap: () => S.tasks.length, done: (b) => S.tasks.length > b },
+  { target: navTo('finance'), title: 'שעות וחשבוניות', text: 'לחץ על "שעות וחשבוניות".', done: () => curView() === 'finance' },
+  { target: '[data-do=timeNew]', title: 'רישום שעות', text: 'לחץ על "+ שעות", בחר פרויקט, הזן שעות ותיאור. הסכום מחושב לפי התעריף השעתי.', snap: () => S.time.length, done: (b) => S.time.length > b },
+  { target: '[data-do=invoiceMake]', title: 'הפקת חשבונית', text: 'הכפתור הזה מאחד את כל השעות שטרם חויבו לחשבונית לכל לקוח. לחץ עליו.', snap: () => S.invoices.length, done: (b) => S.invoices.length > b },
+  { go: 'diagnostic', target: '[data-do=diagNew]', title: 'אבחון עסקי', text: 'שאלון של 20 שאלות ב-5 תחומים, וניתוח SWOT. הדוח מדרג כל תחום ומציע מה לשפר. מתאים לפגישת היכרות עם לקוח חדש.' },
+  { go: 'plan', target: '[data-do=planEdit]', title: 'תוכנית ותחזית', text: 'משנים את ההנחות (הכנסה, צמיחה, הוצאות) והגרף והטבלה מתעדכנים: נקודת איזון, מתי נגמר המזומן ויתרה בסוף התקופה.' },
+  { go: 'market', target: '[data-do=reqNew]', title: 'שוק ייעוץ', text: Cloud.enabled ? 'מפרסמים בקשה ומקבלים הצעות מחיר מיועצים אחרים, או מגישים הצעה לבקשות של אחרים. הצעות המחיר גלויות רק לבעל הבקשה ולמגיש.' : 'מפרסמים בקשה ומשווים הצעות מחיר. (במצב מקומי זו הדגמה; בגרסה המחוברת השוק משותף בין משתמשים.)' },
+  { go: 'dashboard', title: 'סיימת!', text: 'לחיצה על "הדרכה" בפינה מפעילה אותה שוב בכל רגע. טיפים: רשום שעות מיד אחרי כל פגישה, והפק חשבונית פעם בשבוע; הרץ אבחון לכל לקוח חדש לפני הצעת מחיר.', last: true },
+];
+let tour = null; // { i, base }
+function tourStart() { tour = { i: 0, base: null }; tourEnter(); }
+function tourFinish() {
+  tour = null; document.querySelector('.tour-ring')?.remove(); document.querySelector('.tour-pop')?.remove();
+  if (!S.settings.tourDone) { S.settings.tourDone = true; save(); }
+}
+function tourEnter() {
+  const st = TOUR[tour.i]; if (!st) return tourFinish();
+  tour.base = st.snap ? st.snap() : null; tour.adv = false;
+  if (st.go && curView() !== st.go) { location.hash = '#' + st.go; return; } // hashchange מרנדר
+  render();
+}
+function tourNext() { tour.i++; tour.i >= TOUR.length ? tourFinish() : tourEnter(); }
+function tourBack() { if (tour.i > 0) { tour.i--; tourEnter(); } }
+function tourRender() {
+  document.querySelector('.tour-ring')?.remove(); document.querySelector('.tour-pop')?.remove();
+  if (!tour) { // התחלה אוטומטית למשתמש חדש
+    if (!tourAutoTried && !S.settings.tourDone && !S.clients.length && !S.projects.length) { tourAutoTried = true; tourStart(); }
+    return;
+  }
+  const st = TOUR[tour.i];
+  if (st.done && st.done(tour.base)) { if (!tour.adv) { tour.adv = true; setTimeout(() => tour && tourNext(), 350); } return; } // השלב הושלם בפעולת המשתמש
+  if ($('#dlg').open) return; // טופס פתוח: מחכים לסגירתו
+  const el = st.target ? document.querySelector(st.target) : null;
+  const pop = document.createElement('div');
+  pop.className = 'tour-pop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'הדרכה');
+  const n = TOUR.length;
+  pop.innerHTML = `<div class="tour-step">שלב ${tour.i + 1} מתוך ${n}</div><h3>${esc(st.title)}</h3><p>${esc(st.text)}</p>
+  <div class="tour-bar"><i style="width:${Math.round(((tour.i + 1) / n) * 100)}%"></i></div>
+  <div class="row">${st.done ? '<button data-do="tourNext">דלג על השלב</button>' : `<button class="pri" data-do="tourNext">${st.last ? 'סיום' : tour.i === 0 ? 'בוא נתחיל' : 'הבא'}</button>`}
+  ${tour.i > 0 ? '<button data-do="tourBack">הקודם</button>' : ''}<button class="tour-x" data-do="tourFinish">${st.last ? '' : 'יציאה'}</button></div>`;
+  document.body.append(pop);
+  if (el) {
+    el.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = el.getBoundingClientRect(); const ring = document.createElement('div');
+    ring.className = 'tour-ring'; Object.assign(ring.style, { top: r.top - 6 + 'px', left: r.left - 6 + 'px', width: r.width + 12 + 'px', height: r.height + 12 + 'px' });
+    document.body.append(ring);
+    const pr = pop.getBoundingClientRect(); const below = r.bottom + 12 + pr.height < innerHeight;
+    pop.style.top = Math.max(8, below ? r.bottom + 12 : r.top - 12 - pr.height) + 'px';
+    pop.style.left = Math.min(innerWidth - pr.width - 8, Math.max(8, r.left + r.width / 2 - pr.width / 2)) + 'px';
+  } else { pop.classList.add('center'); }
+  pop.querySelector('button.pri, button')?.focus({ preventScroll: true });
+}
+let tourAutoTried = false;
+addEventListener('resize', () => { if (tour) tourRender(); });
+addEventListener('keydown', (e) => { if (tour && e.key === 'Escape' && !$('#dlg').open) tourFinish(); });
+$('#dlg').addEventListener('close', () => { if (tour) tourRender(); });
+
 /* ---------- הפעלה ---------- */
 if (Cloud.enabled) {
   window.addEventListener('pagehide', () => Cloud.flush());
   Cloud.init(async (user) => {
-    if (!user) { me = null; S = empty(); M = []; Cloud.stopMarket(); loading = false; return render(); }
+    if (!user) { me = null; S = empty(); M = []; tour = null; tourAutoTried = false; Cloud.stopMarket(); loading = false; return render(); }
     me = user; loading = true; render();
     try {
       let data = await Cloud.loadWorkspace(user.uid);
