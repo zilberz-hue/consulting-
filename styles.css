@@ -62,3 +62,14 @@ tr.dragging .handle{cursor:grabbing;color:var(--pri)}
 .eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:none;padding:6px 8px;color:var(--mut);display:flex;align-items:center;border-radius:8px;cursor:pointer}
 .eye:hover,.eye[aria-pressed=true]{color:var(--pri)}
 .eye:focus-visible{outline:2px solid var(--pri)}
+#tl{border-collapse:collapse}
+#tl tbody{border-bottom:1px solid var(--line)}
+#tl tbody>tr>td{border-bottom:0}
+tbody.dragging tr{background:var(--bg);box-shadow:0 4px 14px rgba(0,0,0,.25);position:relative;z-index:2;cursor:grabbing}
+.drag-tasks .subrow{display:none}
+.subrow>td{padding-top:0}
+.subtable{border-inline-start:3px solid var(--line);margin:0 0 4px;background:color-mix(in srgb,var(--bg) 60%,transparent)}
+.subtable td{padding:5px 8px;font-size:15px}
+.subbar{margin:4px 0 6px}
+.fold{border:0;background:none;color:var(--mut);padding:0 4px;cursor:pointer;font-size:14px}
+tr.dragging{background:var(--bg)}

@@ -142,7 +142,7 @@ function dashboard() {
   return `<h1>לוח בקרה</h1><div class="grid">
     ${stat(S.clients.length, 'לקוחות')}${stat(S.projects.filter((p) => p.status === 'פעיל').length, 'פרויקטים פעילים')}
     ${stat(money(unbilled), 'שעות שטרם חויבו')}${stat(money(open), 'חשבוניות פתוחות')}${stat(money(paid), 'הכנסות ששולמו')}
-  </div><div class="card" style="margin-top:16px"><h2>משימות בעדיפות עליונה</h2>${due.length ? `<table>${due.map((t) => `<tr><td>${esc(t.title)}</td><td class="muted">${esc(projectName(t.project))}</td><td>${esc(t.due || '')}</td></tr>`).join('')}</table>` : '<div class="empty">אין משימות פתוחות</div>'}</div>
+  </div><div class="card" style="margin-top:16px"><h2>משימות בעדיפות עליונה</h2>${due.length ? `<table>${due.map((t) => `<tr><td>${esc(t.title)}${subProg(t).all ? ` <span class="tag">${subProg(t).done}/${subProg(t).all}</span>` : ''}</td><td class="muted">${esc(projectName(t.project))}</td><td>${esc(t.due || '')}</td></tr>`).join('')}</table>` : '<div class="empty">אין משימות פתוחות</div>'}</div>
   <div class="card no-print"><h2>גיבוי נתונים</h2><p class="muted">${Cloud.enabled ? 'הנתונים נשמרים בחשבון שלך בענן ומסונכרנים בין מכשירים. גיבוי JSON הוא אופציונלי.' : 'הנתונים נשמרים בדפדפן הזה בלבד. מומלץ לייצא גיבוי מדי פעם.'}</p>
   <button data-do="export">ייצוא JSON</button> <button data-do="import">ייבוא JSON</button> <button class="del" data-do="reset">איפוס הכול</button></div>`;
 }
@@ -164,45 +164,81 @@ const CLIENT_F = () => [{ k: 'name', label: 'שם הלקוח / העסק' }, { k:
 const PROJECT_F = () => [{ k: 'name', label: 'שם הפרויקט' }, { k: 'client', label: 'לקוח', type: 'select', opts: clientOpts() }, { k: 'status', label: 'סטטוס', type: 'select', opts: ['פעיל', 'בהמתנה', 'הושלם'].map((x) => [x, x]) }, { k: 'budget', label: 'תקציב (₪)', type: 'number' }];
 
 /* ---------- משימות ---------- */
-/* סדר המשימות במערך S.tasks הוא סדר העדיפות: למעלה = הכי דחוף. המשימות שהושלמו יורדות לסוף. */
+/* סדר המשימות במערך S.tasks הוא סדר העדיפות: למעלה = הכי דחוף. המשימות שהושלמו יורדות לסוף.
+   לכל משימה יש t.subs: תתי-משימות {id,title,due,done}, גם הן לפי סדר עדיפות. */
 const openTasks = () => S.tasks.filter((t) => !t.done);
+const collapsed = new Set(); // משימות שתתי-המשימות שלהן מקופלות (מצב תצוגה בלבד)
+const subProg = (t) => { const s = t.subs || []; return { done: s.filter((x) => x.done).length, all: s.length }; };
+/* תאריך יעד: באדום אם עבר, בכתום אם אחרי תאריך היעד של המשימה הראשית */
+const dueTag = (due, done, parentDue) => {
+  if (!due) return '';
+  if (!done && due < today()) return `<span class="tag bad" title="עבר מועד היעד">${esc(due)}</span>`;
+  if (!done && parentDue && due > parentDue) return `<span class="tag warn" title="אחרי תאריך היעד של המשימה (${esc(parentDue)})">${esc(due)}</span>`;
+  return esc(due);
+};
+function subTable(t) {
+  const subs = t.subs || []; const open = subs.filter((x) => !x.done); const done = subs.filter((x) => x.done);
+  const btn = (act, x, label, text) => `<button class="sm" data-do="${act}" data-id="${t.id}" data-sid="${x.id}" aria-label="${label}" title="${label}">${text}</button>`;
+  const row = (x) => `<tr data-sub="${x.id}" ${x.done ? '' : 'data-open'}>
+    <td class="handle" ${x.done ? '' : 'data-handle="sub" title="גרור כדי לתעדף" aria-hidden="true"'}>${x.done ? '' : '⠿'}</td>
+    <td style="width:30px"><input type="checkbox" aria-label="סמן תת-משימה כהושלמה" ${x.done ? 'checked' : ''} data-do="subToggle" data-id="${t.id}" data-sid="${x.id}"></td>
+    <td style="${x.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${esc(x.title)}</td>
+    <td>${dueTag(x.due, x.done, t.due)}</td>
+    <td class="nowrap">${x.done ? '' : `${btn('subUp', x, 'העלה בעדיפות', '▲')} ${btn('subDown', x, 'הורד בעדיפות', '▼')} `}${btn('subEdit', x, 'עריכה', 'עריכה')} <button class="sm del" data-do="subDel" data-id="${t.id}" data-sid="${x.id}">מחיקה</button></td></tr>`;
+  return `<table class="subtable"><tbody data-subs="${t.id}">${open.map(row).join('')}${done.map(row).join('')}</tbody></table>
+    <div class="row subbar"><button class="sm" data-do="subNew" data-id="${t.id}">+ תת-משימה</button>${open.length > 1 ? `<button class="sm" data-do="subSort" data-id="${t.id}" title="סדר מחדש לפי תאריך יעד">מיין לפי תאריך</button>` : ''}</div>`;
+}
 function tasks() {
   const open = openTasks(); const done = S.tasks.filter((t) => t.done);
-  const row = (t, rank) => `<tr data-task="${t.id}" ${t.done ? '' : 'data-open'}>
-    <td class="handle" ${t.done ? '' : 'data-handle title="גרור כדי לשנות עדיפות" aria-hidden="true"'}>${t.done ? '' : '⠿'}</td>
+  const block = (t, rank) => {
+    const p = subProg(t); const fold = collapsed.has(t.id);
+    return `<tbody data-task="${t.id}" ${t.done ? '' : 'data-open'}><tr class="trow">
+    <td class="handle" ${t.done ? '' : 'data-handle="task" title="גרור כדי לשנות עדיפות" aria-hidden="true"'}>${t.done ? '' : '⠿'}</td>
     <td class="rank">${t.done ? '' : '#' + rank}</td>
     <td style="width:30px"><input type="checkbox" aria-label="סמן כהושלמה" ${t.done ? 'checked' : ''} data-do="taskToggle" data-id="${t.id}"></td>
-    <td style="${t.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${esc(t.title)}</td><td class="muted">${esc(projectName(t.project))}</td>
-    <td>${t.due && !t.done && t.due < today() ? `<span class="tag bad">${esc(t.due)}</span>` : esc(t.due || '')}</td>
-    <td class="nowrap">${t.done ? '' : `<button class="sm" data-do="taskUp" data-id="${t.id}" aria-label="העלה בעדיפות" title="העלה בעדיפות">▲</button> <button class="sm" data-do="taskDown" data-id="${t.id}" aria-label="הורד בעדיפות" title="הורד בעדיפות">▼</button> `}${edit('task', t.id)}</td></tr>`;
+    <td style="${t.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${p.all && !t.done ? `<button class="fold" data-do="taskFold" data-id="${t.id}" aria-expanded="${!fold}" aria-label="${fold ? 'הצג' : 'הסתר'} תתי-משימות">${fold ? '▸' : '▾'}</button> ` : ''}${esc(t.title)}${p.all ? ` <span class="tag ${p.done === p.all ? 'ok' : ''}" title="תתי-משימות שהושלמו">${p.done}/${p.all}</span>` : ''}</td>
+    <td class="muted">${esc(projectName(t.project))}</td>
+    <td>${dueTag(t.due, t.done)}</td>
+    <td class="nowrap">${t.done ? '' : `<button class="sm" data-do="subNew" data-id="${t.id}" title="הוסף תת-משימה">+ תת</button> <button class="sm" data-do="taskUp" data-id="${t.id}" aria-label="העלה בעדיפות" title="העלה בעדיפות">▲</button> <button class="sm" data-do="taskDown" data-id="${t.id}" aria-label="הורד בעדיפות" title="הורד בעדיפות">▼</button> `}${edit('task', t.id)}</td></tr>
+    ${!t.done && p.all && !fold ? `<tr class="subrow"><td></td><td></td><td colspan="5">${subTable(t)}</td></tr>` : ''}</tbody>`;
+  };
   return `<h1>משימות</h1><div class="card"><div class="bar"><span class="muted">${open.length} פתוחות · גרור את ⠿ כדי לתעדף, הדחופה ביותר למעלה</span>
   <span><button data-do="taskSort" title="סדר מחדש לפי תאריך יעד">מיין לפי תאריך</button> <button class="pri" data-do="taskNew">+ משימה</button></span></div>
-  ${S.tasks.length ? `<div class="scroll"><table><tbody id="tl">${open.map((t, i) => row(t, i + 1)).join('')}${done.map((t) => row(t)).join('')}</tbody></table></div>` : '<div class="empty">אין משימות</div>'}</div>`;
+  ${S.tasks.length ? `<div class="scroll"><table id="tl">${open.map((t, i) => block(t, i + 1)).join('')}${done.map((t) => block(t)).join('')}</table></div>` : '<div class="empty">אין משימות</div>'}</div>`;
 }
-/* גרירה בעכבר ובמגע (pointer events) */
+/* גרירה בעכבר ובמגע (pointer events): משימות ראשיות, ותתי-משימות בתוך המשימה שלהן */
 let drag = null;
 document.addEventListener('pointerdown', (ev) => {
   const h = ev.target.closest('[data-handle]'); if (!h || ev.button > 0) return;
-  const row = h.closest('tr'); ev.preventDefault();
-  h.setPointerCapture(ev.pointerId); row.classList.add('dragging'); drag = { row, tb: row.parentElement, id: ev.pointerId };
+  const kind = h.dataset.handle; const item = h.closest(kind === 'task' ? 'tbody[data-open]' : 'tr[data-sub]');
+  ev.preventDefault(); h.setPointerCapture(ev.pointerId); item.classList.add('dragging');
+  if (kind === 'task') item.parentElement.classList.add('drag-tasks'); // בזמן גרירה מקפלים את תתי-המשימות
+  drag = { kind, item, box: item.parentElement, id: ev.pointerId };
 });
 document.addEventListener('pointermove', (ev) => {
   if (!drag || ev.pointerId !== drag.id) return;
-  const rows = [...drag.tb.querySelectorAll('tr[data-open]')].filter((r) => r !== drag.row);
-  const before = rows.find((r) => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
-  if (before) drag.tb.insertBefore(drag.row, before); else if (rows.length) rows[rows.length - 1].after(drag.row);
+  const sibs = [...drag.box.children].filter((el) => el.hasAttribute('data-open') && el !== drag.item);
+  const before = sibs.find((r) => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+  if (before) drag.box.insertBefore(drag.item, before); else if (sibs.length) sibs[sibs.length - 1].after(drag.item);
   if (ev.clientY < 70) scrollBy(0, -14); else if (ev.clientY > innerHeight - 70) scrollBy(0, 14);
 });
 const endDrag = (ev) => {
   if (!drag || ev.pointerId !== drag.id) return;
-  drag.row.classList.remove('dragging');
-  const ids = [...drag.tb.querySelectorAll('tr[data-open]')].map((r) => r.dataset.task); drag = null;
-  setTasksOrder(ids);
+  const { kind, item, box } = drag; drag = null;
+  item.classList.remove('dragging'); box.classList.remove('drag-tasks');
+  const ids = [...box.children].filter((el) => el.hasAttribute('data-open')).map((el) => el.dataset.task || el.dataset.sub);
+  if (kind === 'task') setTasksOrder(ids); else setSubsOrder(box.dataset.subs, ids);
 };
 document.addEventListener('pointerup', endDrag); document.addEventListener('pointercancel', endDrag);
 function setTasksOrder(ids) {
   const open = ids.map((id) => by(S.tasks, id)).filter(Boolean);
   S.tasks = [...open, ...S.tasks.filter((t) => t.done || !open.includes(t))];
+  save(); render();
+}
+function setSubsOrder(tid, ids) {
+  const t = by(S.tasks, tid); if (!t) return;
+  const open = ids.map((id) => by(t.subs || [], id)).filter(Boolean);
+  t.subs = [...open, ...(t.subs || []).filter((x) => x.done || !open.includes(x))];
   save(); render();
 }
 function moveTask(id, d) {
@@ -211,6 +247,13 @@ function moveTask(id, d) {
   [ids[i], ids[j]] = [ids[j], ids[i]]; setTasksOrder(ids);
   document.querySelector(`[data-do="${d < 0 ? 'taskUp' : 'taskDown'}"][data-id="${id}"]`)?.focus(); // ממשיכים להזיז במקלדת
 }
+function moveSub(tid, sid, d) {
+  const t = by(S.tasks, tid); const ids = (t?.subs || []).filter((x) => !x.done).map((x) => x.id); const i = ids.indexOf(sid); const j = i + d;
+  if (i < 0 || j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]]; setSubsOrder(tid, ids);
+  document.querySelector(`[data-do="${d < 0 ? 'subUp' : 'subDown'}"][data-sid="${sid}"]`)?.focus();
+}
+const SUB_F = () => [{ k: 'title', label: 'תת-משימה' }, { k: 'due', label: 'תאריך יעד', type: 'date' }];
 const TASK_F = () => [{ k: 'title', label: 'משימה' }, { k: 'project', label: 'פרויקט', type: 'select', opts: [['', '— ללא —'], ...projectOpts()] }, { k: 'due', label: 'תאריך יעד', type: 'date' }];
 
 /* ---------- שעות וחשבוניות ---------- */
@@ -365,6 +408,14 @@ const ACTIONS = {
   taskDown: (id) => moveTask(id, 1),
   taskSort: () => setTasksOrder(openTasks().sort((a, b) => (a.due || '9').localeCompare(b.due || '9')).map((t) => t.id)),
   taskToggle: (id) => { const t = by(S.tasks, id); t.done = !t.done; save(); render(); },
+  taskFold: (id) => { collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id); render(); },
+  subNew: (id) => form('תת-משימה חדשה', SUB_F(), null, (v) => { if (v.title) { const t = by(S.tasks, id); (t.subs ||= []).push({ id: uid(), done: false, ...v }); collapsed.delete(id); } }),
+  subEdit: (id, d) => form('עריכת תת-משימה', SUB_F(), by(by(S.tasks, id).subs, d.sid), (v) => Object.assign(by(by(S.tasks, id).subs, d.sid), v)),
+  subDel: (id, d) => ask('למחוק את תת-המשימה?', () => { const t = by(S.tasks, id); t.subs = t.subs.filter((x) => x.id !== d.sid); save(); render(); }),
+  subToggle: (id, d) => { const x = by(by(S.tasks, id).subs, d.sid); x.done = !x.done; save(); render(); },
+  subUp: (id, d) => moveSub(id, d.sid, -1),
+  subDown: (id, d) => moveSub(id, d.sid, 1),
+  subSort: (id) => setSubsOrder(id, (by(S.tasks, id).subs || []).filter((x) => !x.done).sort((p, q) => (p.due || '9').localeCompare(q.due || '9')).map((x) => x.id)),
   rate: () => form('תעריף שעתי', [{ k: 'rate', label: 'תעריף שעתי (₪)', type: 'number' }], S.settings, (v) => { if (v.rate > 0) S.settings.rate = v.rate; }),
   timeNew: () => need(S.projects.length, 'יש להוסיף פרויקט קודם') && form('רישום שעות', TIME_F(), null, (v) => { if (v.hours > 0) S.time.push({ id: uid(), rate: S.settings.rate, ...v }); }),
   timeDel: (id) => delFrom(S.time, id),
@@ -494,7 +545,7 @@ const TOUR = [
   { target: '[data-do=clientNew]', title: 'הוספת לקוח', text: 'לחץ על "+ לקוח", הקלד שם ושמור.', snap: () => S.clients.length, done: (b) => S.clients.length > b },
   { target: '[data-do=projectNew]', title: 'הוספת פרויקט', text: 'כל עבודה שייכת לפרויקט של לקוח. לחץ על "+ פרויקט", בחר את הלקוח ושמור.', snap: () => S.projects.length, done: (b) => S.projects.length > b },
   { target: navTo('tasks'), title: 'משימות', text: 'עכשיו למשימות. לחץ על לשונית "משימות".', done: () => curView() === 'tasks' },
-  { target: '[data-do=taskNew]', title: 'משימה ראשונה', text: 'הוסף משימה עם תאריך יעד. את סדר העדיפויות קובעים בגרירה של ⠿ (או בחיצים), והמשימות העליונות מופיעות גם בלוח הבקרה. משימות שעבר מועדן מסומנות באדום.', snap: () => S.tasks.length, done: (b) => S.tasks.length > b },
+  { target: '[data-do=taskNew]', title: 'משימה ראשונה', text: 'הוסף משימה עם תאריך יעד. את סדר העדיפויות קובעים בגרירה של ⠿ (או בחיצים), ואפשר לפרק משימה לתתי-משימות עם תאריכים משלהן (כפתור "+ תת"), גם הן ניתנות לגרירה. המשימות העליונות מופיעות גם בלוח הבקרה. משימות שעבר מועדן מסומנות באדום.', snap: () => S.tasks.length, done: (b) => S.tasks.length > b },
   { target: navTo('finance'), title: 'שעות וחשבוניות', text: 'לחץ על "שעות וחשבוניות".', done: () => curView() === 'finance' },
   { target: '[data-do=timeNew]', title: 'רישום שעות', text: 'לחץ על "+ שעות", בחר פרויקט, הזן שעות ותיאור. הסכום מחושב לפי התעריף השעתי.', snap: () => S.time.length, done: (b) => S.time.length > b },
   { target: '[data-do=invoiceMake]', title: 'הפקת חשבונית', text: 'הכפתור הזה מאחד את כל השעות שטרם חויבו לחשבונית לכל לקוח. לחץ עליו.', snap: () => S.invoices.length, done: (b) => S.invoices.length > b },
