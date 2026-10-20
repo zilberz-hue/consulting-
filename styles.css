@@ -52,3 +52,9 @@ svg{max-width:100%;height:auto}
 .tour-bar{height:4px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:10px}.tour-bar i{display:block;height:100%;background:var(--pri)}
 .tour-pop .row{margin-top:0;flex-wrap:wrap}.tour-x{margin-inline-start:auto;border:0;background:none;color:var(--mut);text-decoration:underline}
 @media(prefers-reduced-motion:reduce){.tour-ring{transition:none}}
+.handle{width:28px;text-align:center;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--mut);font-size:18px;line-height:1}
+.handle:hover{color:var(--pri)}
+.rank{width:34px;color:var(--mut);font-size:13px;font-variant-numeric:tabular-nums}
+.nowrap{white-space:nowrap}
+tr.dragging{background:var(--bg);box-shadow:0 4px 14px rgba(0,0,0,.25);position:relative;z-index:2;cursor:grabbing}
+tr.dragging .handle{cursor:grabbing;color:var(--pri)}
