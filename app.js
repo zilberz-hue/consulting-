@@ -191,33 +191,48 @@ const dueTag = (due, done, parentDue) => {
   if (!done && parentDue && due > parentDue) return `<span class="tag warn" title="אחרי תאריך היעד של המשימה (${esc(parentDue)})">${esc(due)}</span>`;
   return esc(due);
 };
-function subTable(t) {
+function subTable(t, searching = false) {
   const subs = t.subs || []; const open = subs.filter((x) => !x.done); const done = subs.filter((x) => x.done);
   const btn = (act, x, label, text) => `<button class="sm" data-do="${act}" data-id="${t.id}" data-sid="${x.id}" aria-label="${label}" title="${label}">${text}</button>`;
   const row = (x) => `<tr data-sub="${x.id}" ${x.done ? '' : 'data-open'}>
-    <td class="handle" ${x.done ? '' : 'data-handle="sub" title="גרור כדי לתעדף" aria-hidden="true"'}>${x.done ? '' : '⠿'}</td>
+    <td class="handle" ${x.done || searching ? '' : 'data-handle="sub" title="גרור כדי לתעדף" aria-hidden="true"'}>${x.done || searching ? '' : '⠿'}</td>
     <td style="width:30px"><input type="checkbox" aria-label="סמן תת-משימה כהושלמה" ${x.done ? 'checked' : ''} data-do="subToggle" data-id="${t.id}" data-sid="${x.id}"></td>
-    <td style="${x.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${esc(x.title)}</td>
+    <td style="${x.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${hl(x.title)}</td>
     <td>${dueTag(x.due, x.done, t.due)}</td>
     <td class="nowrap">${btn('subEdit', x, 'עריכה', 'עריכה')} <button class="sm del" data-do="subDel" data-id="${t.id}" data-sid="${x.id}">מחיקה</button></td></tr>`;
   return `<table class="subtable"><tbody data-subs="${t.id}">${open.map(row).join('')}${done.map(row).join('')}</tbody></table>
     <div class="row subbar"><button class="sm" data-do="subNew" data-id="${t.id}">+ תת-משימה</button>${open.length > 1 ? `<button class="sm" data-do="subSort" data-id="${t.id}" title="סדר מחדש לפי תאריך יעד">מיין לפי תאריך</button>` : ''}</div>`;
 }
+let taskQuery = ''; // חיפוש במשימות (מצב תצוגה בלבד)
+const qNorm = (s) => String(s || '').toLowerCase();
+/* מדגיש את מילת החיפוש בטקסט (אחרי escape לכל חלק) */
+const hl = (text) => {
+  const q = qNorm(taskQuery.trim()); const s = String(text || ''); if (!q) return esc(s);
+  let out = ''; let i = 0; const low = qNorm(s);
+  for (let j = low.indexOf(q); j >= 0; j = low.indexOf(q, i)) { out += esc(s.slice(i, j)) + '<mark>' + esc(s.slice(j, j + q.length)) + '</mark>'; i = j + q.length; }
+  return out + esc(s.slice(i));
+};
+const taskMatches = (t, q) => [t.title, t.project && projectName(t.project), t.due, ...(t.subs || []).flatMap((s) => [s.title, s.due])].some((x) => qNorm(x).includes(q));
 function tasks() {
-  const open = openTasks(); const done = S.tasks.filter((t) => t.done);
+  const q = qNorm(taskQuery.trim()); const searching = !!q;
+  const allOpen = openTasks(); const rankOf = new Map(allOpen.map((t, i) => [t.id, i + 1])); // המספר נשאר לפי העדיפות המלאה
+  const open = searching ? allOpen.filter((t) => taskMatches(t, q)) : allOpen;
+  const done = S.tasks.filter((t) => t.done && (!searching || taskMatches(t, q)));
   const block = (t, rank) => {
-    const p = subProg(t); const fold = collapsed.has(t.id);
+    const p = subProg(t); const fold = collapsed.has(t.id) && !searching; // בחיפוש מציגים תמיד את תתי-המשימות
+    const drag = !t.done && !searching; // בזמן חיפוש הגרירה כבויה, כדי לא לשבש את סדר המשימות המוסתרות
     return `<tbody data-task="${t.id}" ${t.done ? '' : 'data-open'}><tr class="trow">
-    <td class="handle" ${t.done ? '' : 'data-handle="task" title="גרור כדי לשנות עדיפות" aria-hidden="true"'}>${t.done ? '' : '⠿'}</td>
+    <td class="handle" ${drag ? 'data-handle="task" title="גרור כדי לשנות עדיפות" aria-hidden="true"' : ''}>${drag ? '⠿' : ''}</td>
     <td class="rank">${t.done ? '' : '#' + rank}</td>
     <td style="width:30px"><input type="checkbox" aria-label="סמן כהושלמה" ${t.done ? 'checked' : ''} data-do="taskToggle" data-id="${t.id}"></td>
-    <td style="${t.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${p.all && !t.done ? `<button class="fold" data-do="taskFold" data-id="${t.id}" aria-expanded="${!fold}" aria-label="${fold ? 'הצג' : 'הסתר'} תתי-משימות">${fold ? '▸' : '▾'}</button> ` : ''}${esc(t.title)}${p.all ? ` <span class="tag ${p.done === p.all ? 'ok' : ''}" title="תתי-משימות שהושלמו">${p.done}/${p.all}</span>` : ''}</td>
-    <td class="muted">${esc(projectName(t.project))}</td>
+    <td style="${t.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${p.all && !t.done ? `<button class="fold" data-do="taskFold" data-id="${t.id}" aria-expanded="${!fold}" aria-label="${fold ? 'הצג' : 'הסתר'} תתי-משימות">${fold ? '▸' : '▾'}</button> ` : ''}${hl(t.title)}${p.all ? ` <span class="tag ${p.done === p.all ? 'ok' : ''}" title="תתי-משימות שהושלמו">${p.done}/${p.all}</span>` : ''}</td>
+    <td class="muted">${hl(projectName(t.project))}</td>
     <td>${dueTag(t.due, t.done)}</td>
     <td class="nowrap">${t.done ? '' : `<button class="sm" data-do="subNew" data-id="${t.id}" title="הוסף תת-משימה">+ תת</button> `}${edit('task', t.id)}</td></tr>
-    ${!t.done && p.all && !fold ? `<tr class="subrow"><td></td><td></td><td colspan="5">${subTable(t)}</td></tr>` : ''}</tbody>`;
+    ${!t.done && p.all && !fold ? `<tr class="subrow"><td></td><td></td><td colspan="5">${subTable(t, searching)}</td></tr>` : ''}</tbody>`;
   };
-  return `<h1>משימות</h1><div class="card"><div class="bar"><span class="muted">${open.length} פתוחות · גרור את ⠿ כדי לתעדף, הדחופה ביותר למעלה</span>
+  return `<h1>משימות</h1><div class="card"><div class="searchbar"><input id="tq" type="search" placeholder="חיפוש במשימות, בתתי-משימות ובפרויקטים…" aria-label="חיפוש במשימות" value="${esc(taskQuery)}" autocomplete="off"></div>
+  <div class="bar"><span class="muted">${searching ? `נמצאו ${open.length + done.length} משימות · הגרירה כבויה בזמן חיפוש` : `${allOpen.length} פתוחות · גרור את ⠿ כדי לתעדף, הדחופה ביותר למעלה`}</span>
   <span><select id="tsort" aria-label="מיין את המשימות הפתוחות" title="הסדר החדש נשמר כסדר העדיפות, ואפשר להמשיך לגרור" style="width:auto">
     <option value="" selected disabled>מיין לפי…</option>
     <option value="due-asc">תאריך יעד: הקרוב ראשון</option><option value="due-desc">תאריך יעד: הרחוק ראשון</option>
@@ -225,8 +240,17 @@ function tasks() {
     <option value="newest">נוספו לאחרונה</option><option value="oldest">הוותיקות ראשונות</option>
     <option value="subs-open">הכי הרבה תתי-משימות פתוחות</option><option value="progress">הכי קרובות להשלמה</option>
   </select> <button class="pri" data-do="taskNew">+ משימה</button></span></div>
-  ${S.tasks.length ? `<div class="scroll"><table id="tl">${open.map((t, i) => block(t, i + 1)).join('')}${done.map((t) => block(t)).join('')}</table></div>` : '<div class="empty">אין משימות</div>'}</div>`;
+  ${!S.tasks.length ? '<div class="empty">אין משימות</div>'
+    : searching && !open.length && !done.length ? `<div class="empty">לא נמצאו משימות עבור "${esc(taskQuery.trim())}". <button class="sm" data-do="taskQueryClear">נקה חיפוש</button></div>`
+    : `<div class="scroll"><table id="tl">${open.map((t) => block(t, rankOf.get(t.id))).join('')}${done.map((t) => block(t)).join('')}</table></div>`}</div>`;
 }
+document.addEventListener('input', (ev) => {
+  if (ev.target.id !== 'tq') return;
+  taskQuery = ev.target.value; const pos = ev.target.selectionStart;
+  render();
+  const el = $('#tq'); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch { /* type=search */ } }
+});
+document.addEventListener('keydown', (ev) => { if (ev.target.id === 'tq' && ev.key === 'Escape' && taskQuery) { taskQuery = ''; render(); $('#tq')?.focus(); } });
 /* גרירה בעכבר ובמגע (pointer events): משימות ראשיות, ותתי-משימות בתוך המשימה שלהן */
 let drag = null;
 const dragRect = (el) => (el.matches('tbody') ? el.rows[0] : el).getBoundingClientRect(); // tbody: מודדים לפי השורה הראשונה
@@ -447,6 +471,7 @@ const ACTIONS = {
   taskEdit: (id) => form('עריכת משימה', TASK_F(), by(S.tasks, id), (v) => Object.assign(by(S.tasks, id), v)),
   taskDel: (id) => delFrom(S.tasks, id),
   taskToggle: (id) => { const t = by(S.tasks, id); t.done = !t.done; save(); render(); },
+  taskQueryClear: () => { taskQuery = ''; render(); $('#tq')?.focus(); },
   taskFold: (id) => { collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id); render(); },
   subNew: (id) => form('תת-משימה חדשה', SUB_F(), null, (v) => { if (v.title) { const t = by(S.tasks, id); (t.subs ||= []).push({ id: uid(), done: false, ...v }); collapsed.delete(id); } }),
   subEdit: (id, d) => form('עריכת תת-משימה', SUB_F(), by(by(S.tasks, id).subs, d.sid), (v) => Object.assign(by(by(S.tasks, id).subs, d.sid), v)),

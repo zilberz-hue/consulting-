@@ -87,3 +87,5 @@ tbody[data-open] tr.trow,tr[data-sub][data-open]{cursor:grab}
 .rate{display:flex;align-items:center;gap:10px}.rate input{width:150px;padding:0}.rate output{width:1.2em;text-align:center;font-weight:600}
 .wiz{max-width:640px}.wiz .q{flex-wrap:wrap}
 input,select,textarea,progress{accent-color:var(--pri)}
+.searchbar{margin-bottom:10px}.searchbar input{max-width:420px}
+mark{background:#f3dfb0;background:color-mix(in srgb,var(--pri) 30%,transparent);color:inherit;border-radius:3px;padding:0 1px}
