@@ -533,16 +533,17 @@ const ACTIONS = {
       save(); render();
     });
   },
-  profNew: () => { wiz = { step: 0, data: { hours: '10' }, editId: null }; profOpen = null; render(); scrollTo(0, 0); },
+  profNew: () => { wiz = { step: 0, data: { hours: '10', readiness: '7', languages: ['עברית'] }, editId: null }; profOpen = null; render(); scrollTo(0, 0); },
   profOpen: (id) => { profOpen = id; render(); scrollTo(0, 0); },
   profBack: () => { profOpen = null; render(); },
   profEdit: (id) => { wiz = { step: 0, data: JSON.parse(JSON.stringify(by(S.profiles, id).answers)), editId: id }; profOpen = null; render(); scrollTo(0, 0); },
   profDel: (id) => ask('למחוק את האפיון והתוכנית? משימות שכבר נוצרו מהתוכנית יישארו.', () => { S.profiles = S.profiles.filter((x) => x.id !== id); if (profOpen === id) profOpen = null; save(); render(); }),
+  profMore: (id, d) => { const p = by(S.profiles, id); const x = by(p.more || [], d.mid); if (!x) return; p.more = p.more.filter((m) => m !== x); p.plan.push(x); p.plan.sort((m, n) => m.phase - n.phase); save(); render(); },
   profTasks: (id) => { // משימה לכל שלב, עם תתי-משימות ותאריכי יעד
     const p = by(S.profiles, id); if (!p) return;
     [1, 2, 3, 4].forEach((ph) => {
       const items = p.plan.filter((x) => x.phase === ph); if (!items.length) return;
-      const due = pDate(p.createdAt, P_PHASES[ph].days);
+      const due = pDate(planBase(p), P_PHASES[ph].days);
       S.tasks.push({ id: uid(), title: `${p.name} · ${P_PHASES[ph].label}`, project: '', due, done: false, created: Date.now(), subs: items.map((x) => ({ id: uid(), title: x.title, due, done: false })) });
     });
     p.tasksAdded = true; save(); location.hash = '#tasks'; render();
@@ -553,7 +554,7 @@ const ACTIONS = {
     const e = wizCheck(); if (e) { $('#wizErr').textContent = e; return; }
     if (wiz.step < WIZ_STEPS.length - 1) { wiz.step++; render(); scrollTo(0, 0); return; }
     const d = wiz.data; const base = Date.now(); const b = buildProfile(d, base);
-    const rec = { id: wiz.editId || uid(), name: d.name.trim(), role: d.role, answers: d, archetype: b.archetype, ranked: b.ranked, low: b.low, top: b.top, plan: b.plan, notes: b.notes, createdAt: base, tasksAdded: false };
+    const rec = { id: wiz.editId || uid(), name: d.name.trim(), role: d.role, answers: d, archetype: b.archetype, ranked: b.ranked, low: b.low, top: b.top, plan: b.plan, more: b.more, notes: b.notes, kpis: b.kpis, createdAt: base, startAt: b.startAt, tasksAdded: false };
     const i = S.profiles.findIndex((x) => x.id === rec.id); if (i >= 0) S.profiles[i] = rec; else S.profiles.push(rec);
     profOpen = rec.id; wiz = null; save(); render(); scrollTo(0, 0);
   },
@@ -586,6 +587,23 @@ const P_SKILLS = { expertise: 'מומחיות מקצועית', marketing: 'שי�
 const P_ARCH = { expertise: 'המומחה/ית', marketing: 'איש/ת הנראות', sales: 'בונה/ת הקשרים', ops: 'המסדר/ת', finance: 'איש/ת המספרים', people: 'המחבר/ת', tech: 'הטכנולוג/ית' };
 const P_GOALS = { clients: 'להגדיל את מספר הלקוחות / המטופלים', income: 'להגדיל הכנסה', brand: 'לבנות מותג ונראות', structure: 'לבנות מבנה עבודה מסודר', team: 'להקים צוות או שותפויות', product: 'לפתח שירות או מוצר חדש', balance: 'לשפר איזון בין עבודה לחיים', skills: 'להעמיק מקצועית' };
 const P_PHASES = [null, { label: 'שבועיים ראשונים: יסודות', days: 14 }, { label: 'עד יום 30: הקמה', days: 30 }, { label: 'עד יום 60: צמיחה', days: 60 }, { label: 'עד יום 90: סקירה והמשך', days: 90 }];
+const P_OPT = {
+  specialties: ['חרדה ולחץ', 'דיכאון ומצב רוח', 'זוגיות', 'הורות ומשפחה', 'ילדים ונוער', 'טראומה', 'תזונה ואורח חיים', 'כאב כרוני', 'שינה', 'התמכרויות', 'פיתוח אישי וקריירה', 'ליווי עסקי'],
+  education: ['תואר ראשון', 'תואר שני', 'דוקטורט', 'תעודה מקצועית', 'רישיון / הסמכה רשמית', 'קורסים והשתלמויות'],
+  languages: ['עברית', 'אנגלית', 'ערבית', 'רוסית', 'צרפתית', 'ספרדית', 'אמהרית', 'יידיש'],
+  audience: ['ילדים', 'נוער', 'מבוגרים', 'זוגות', 'משפחות', 'גיל שלישי', 'נשים', 'גברים', 'ארגונים וחברות', 'עסקים קטנים'],
+  channels: ['אתר', 'אינסטגרם', 'פייסבוק', 'טיקטוק', 'לינקדאין', 'וואטסאפ עסקי', 'פרופיל גוגל עסקי', 'יומן זימונים אונליין', 'ניוזלטר', 'מערכת ניהול לקוחות'],
+  budget: ['עד 1,000 ₪', '1,000 עד 5,000 ₪', '5,000 עד 20,000 ₪', 'מעל 20,000 ₪'],
+  values: ['מקצועיות', 'חופש', 'יציבות', 'השפעה ושליחות', 'צמיחה', 'משפחה', 'יצירתיות', 'יושרה', 'קהילה'],
+  energy: ['עבודה עם אנשים', 'כתיבה ותוכן', 'מכירה ושיחות', 'ניהול וארגון', 'טכנולוגיה', 'למידה', 'עבודה לבד', 'הופעה מול קהל'],
+  times: ['בקרים', 'צהריים', 'ערבים', 'סופי שבוע'],
+  learning: ['קריאה', 'וידאו', 'ליווי אישי', 'סדנה קבוצתית', 'תוך כדי עשייה'],
+  barriers: ['זמן', 'כסף', 'ביטחון עצמי', 'ידע', 'טכנולוגיה', 'משפחה ואיזון', 'בריאות', 'בדידות / אין עם מי להתייעץ'],
+  support: ['ליווי שבועי', 'סדנאות', 'תבניות ומסמכים', 'עזרה בשיווק', 'עזרה בטכנולוגיה', 'נטוורקינג וחיבורים'],
+  start: ['מיד', 'תוך שבועיים', 'תוך חודש', 'בעוד יותר מחודש'],
+};
+const P_START_DAYS = { 'מיד': 0, 'תוך שבועיים': 14, 'תוך חודש': 30, 'בעוד יותר מחודש': 45 };
+const planBase = (p) => p.startAt || p.createdAt; // תאריך תחילת התוכנית
 const P_ROLE_Q = {
   founder: [
     { k: 'stage', label: 'באיזה שלב העסק?', opts: ['רעיון', 'בהקמה', 'פועל עד שנה', 'פועל מעל שנה'] },
@@ -659,8 +677,9 @@ function buildProfile(a, base = Date.now()) {
   const order = Object.keys(P_SKILLS);
   const ranked = [...sk].sort((x, y) => y.v - x.v || order.indexOf(x.k) - order.indexOf(y.k));
   const top = ranked[0]; const low = [...sk].sort((x, y) => x.v - y.v || order.indexOf(x.k) - order.indexOf(y.k)).slice(0, 2);
-  const acts = P_BASE[a.role].map((x) => ({ ...x, src: 'role' }));
-  const add = (o) => acts.push(o);
+  // שתי פעולות היסוד של התפקיד חיוניות; שאר התבנית הכללית מפנה מקום לפעולות שנובעות מהתשובות האישיות
+  const acts = P_BASE[a.role].map((x, i) => ({ ...x, p: i < 2 ? Math.min(x.p, 1) : Math.max(x.p, 2), src: 'role' }));
+  const add = (o) => acts.push({ src: 'ans', ...o }); // src: ans (מהתשובות), goal, gap, role (תבנית כללית)
   // התאמות לפי תשובות התפקיד
   if (a.role === 'founder') {
     if (['רעיון', 'בהקמה'].includes(a.stage)) add({ p: 1, ph: 1, area: 'הקמה', t: 'לבדוק היבטים משפטיים בסיסיים: סוג עוסק, ביטוח, הסכם סטנדרטי ללקוח', why: 'להתחיל נכון עולה פחות מלתקן אחר כך.' });
@@ -681,26 +700,70 @@ function buildProfile(a, base = Date.now()) {
     if (num(a.target) > Math.max(num(a.load) * 1.5, num(a.load) + 2)) add({ p: 1, ph: 2, area: 'שיווק', t: `לקבוע יעד שבועי של פניות חדשות כדי להגיע מ-${num(a.load)} ל-${num(a.target)} מטופלים בשבוע`, why: 'הפער בין העומס הנוכחי ליעד מחייב מקור פניות קבוע.' });
   }
   // פערים (שתי המיומנויות החלשות) וחוזקה אחת למינוף
-  low.forEach((s, i) => P_GAP[s.k].forEach((g) => add({ p: i === 0 ? 1 : 2, ph: g.ph, area: P_SKILLS[s.k], t: g.t, why: `סימנת "${P_SKILLS[s.k]}" ב-${s.v} מתוך 5.`, src: 'gap' })));
+  low.forEach((s, i) => P_GAP[s.k].forEach((g, gi) => add({ p: i === 0 && gi === 0 ? 1 : i === 1 && gi === 1 ? 3 : 2, ph: g.ph, area: P_SKILLS[s.k], t: g.t, why: `סימנת "${P_SKILLS[s.k]}" ב-${s.v} מתוך 5.`, src: 'gap' })));
   if (top.v >= 4) add({ p: 3, ph: 3, area: P_SKILLS[top.k], t: `למנף את החוזקה "${P_SKILLS[top.k]}": להגדיר איך היא הופכת ליתרון בהצעה שלך`, why: `זו החוזקה הבולטת שלך (${top.v} מתוך 5).` });
-  (a.goals || []).forEach((g) => P_GOAL_ACT[g] && add({ p: 1, ph: P_GOAL_ACT[g].ph, area: 'מטרה', t: P_GOAL_ACT[g].t, why: `בחרת את המטרה: ${P_GOALS[g]}.` }));
+  const ct = num(a.clientsTarget);
+  (a.goals || []).forEach((g) => {
+    if (g === 'income' && num(a.incomeTarget) > num(a.incomeNow)) return; // יש פעולה מדויקת לפער ההכנסה (למטה)
+    if (g === 'clients' && a.role === 'therapist' && num(a.target) > num(a.load)) return; // יש פעולה מדויקת ליעד המטופלים
+    const t = g === 'clients' && ct ? `לקבוע יעד של ${ct} לקוחות / מטופלים חדשים בחודש ולמדוד אותו כל שבוע` : P_GOAL_ACT[g]?.t;
+    if (t) add({ p: 1, ph: P_GOAL_ACT[g].ph, area: 'מטרה', t, why: `בחרת את המטרה: ${P_GOALS[g]}.`, src: 'goal' });
+  });
+  // כסף: פער הכנסה ← כמה לקוחות או פגישות בחודש
+  const inc0 = num(a.incomeNow); const inc1 = num(a.incomeTarget); const price = num(a.price);
+  if (inc1 > inc0) {
+    const gap = inc1 - inc0; const n = price > 0 ? Math.ceil(gap / price) : 0;
+    add({ p: 1, ph: 2, area: 'כספים', t: n ? `לסגור את פער ההכנסה של ${money(gap)} בחודש: עוד ${n} פגישות או לקוחות בחודש (כ-${Math.ceil(n / 4.3)} בשבוע) במחיר ${money(price)}` : `לפרק את פער ההכנסה של ${money(gap)} בחודש למספר לקוחות ומחיר`, why: `היום ${money(inc0)}, היעד ${money(inc1)}.` });
+    if (price > 0 && n > Math.max(num(a.hoursTarget) || num(a.hours) || 20, 1) * 4.3) add({ p: 1, ph: 3, area: 'כספים', t: 'לבדוק העלאת מחיר או חבילות, כי היעד לא ייסגר רק בתוספת שעות', why: `${n} פגישות נוספות בחודש הן יותר מהזמן שהגדרת.` });
+  }
+  const bud = a.budget || '';
+  if (bud === 'מעל 20,000 ₪' || bud === '5,000 עד 20,000 ₪') add({ p: 2, ph: 3, area: 'שיווק', t: 'להשקיע חלק מהתקציב בקמפיין ממוקד או באיש מקצוע חיצוני, ולמדוד עלות לליד', why: `התקציב שציינת: ${bud}.` });
+  // קהל, ערוצים, התמחות ושפות
+  const aud = a.audience || []; const ch = a.channels || []; const spec = [...(a.specialties || []), ...(a.specialtiesOther ? [a.specialtiesOther] : [])];
+  if (aud.length) add({ p: 2, ph: 3, area: 'שיווק', t: `להתאים את המסר והערוצים לקהל: ${aud.slice(0, 3).join(', ')}`, why: aud.length > 3 ? `בחרת ${aud.length} קהלים. כדאי להתחיל בשניים או שלושה.` : 'מסר שמדבר לקהל מסוים עובד טוב יותר ממסר כללי.' });
+  if (spec.length) add({ p: 2, ph: 2, area: 'שיווק', t: `לנסח הצעה ייחודית סביב ההתמחות: ${spec.slice(0, 2).join(' ו')}`, why: 'התמחות ברורה מקלה על הפניות ועל המחיר.' });
+  if (!ch.some((c) => ['אתר', 'אינסטגרם', 'פייסבוק', 'טיקטוק', 'לינקדאין', 'פרופיל גוגל עסקי'].includes(c))) add({ p: 1, ph: 2, area: 'שיווק', t: 'להקים נוכחות בסיסית: פרופיל גוגל עסקי ועמוד ברשת אחת', why: 'בלי נוכחות דיגיטלית קשה למצוא אותך.' });
+  else if (ch.length >= 5) add({ p: 2, ph: 2, area: 'שיווק', t: 'לבחור שני ערוצים להתמקד בהם ולמדוד מה מביא פניות', why: `את/ה פעיל/ה ב-${ch.length} ערוצים. פיזור מוריד את התוצאה בכל אחד.` });
+  if (!ch.includes('יומן זימונים אונליין') && !ch.includes('מערכת ניהול לקוחות')) add({ p: 2, ph: 2, area: 'כלים', t: 'להפעיל יומן זימונים אונליין וניהול לקוחות (אפשר באפליקציה הזו)', why: 'חוסך שיחות תיאום ומאפשר מעקב.' });
+  const langs = [...(a.languages || []), ...(a.languagesOther ? [a.languagesOther] : [])].filter((l) => l !== 'עברית');
+  if (langs.length) add({ p: 3, ph: 3, area: 'שיווק', t: `לפנות גם לקהל דובר ${langs.slice(0, 2).join(' ו')}: פרופיל או עמוד בשפה הזו`, why: 'שפה נוספת היא יתרון תחרותי.' });
+  // חסמים
+  const BAR = { 'זמן': ['תפעול', 'לחסום ביומן שני בלוקים קבועים בשבוע לעבודה על הבנייה'], 'כסף': ['כספים', 'לבחור פעולות בעלות נמוכה ולקבוע תקציב חודשי קבוע'], 'ביטחון עצמי': ['התפתחות', 'לאסוף שלוש המלצות או סיפורי הצלחה ולשתף אותם'], 'ידע': ['התפתחות', 'לזהות את פער הידע המרכזי ולקבוע לו מקור לימוד אחד'], 'טכנולוגיה': ['כלים', 'להטמיע כלי אחד בכל פעם, עם הדרכה קצרה'], 'משפחה ואיזון': ['איזון', 'לתאם עם המשפחה זמני עבודה קבועים וזמן פנוי קבוע'], 'בריאות': ['איזון', 'לבנות קצב עבודה שמשאיר זמן להתאוששות'], 'בדידות / אין עם מי להתייעץ': ['התפתחות', 'להצטרף לקבוצת עמיתים או לקבוע שותף/ה לחשיבה'] };
+  (a.barriers || []).forEach((b, i) => BAR[b] && add({ p: i < 2 ? 1 : 2, ph: 1, area: BAR[b][0], t: BAR[b][1], why: `סימנת שזה מעכב אותך: ${b}.` }));
+  // תמיכה שביקשת
+  const times = a.times || [];
+  const SUP = { 'ליווי שבועי': [0, 1, 'ליווי', `לקבוע פגישת ליווי שבועית קבועה${times.length ? ` (${times[0]})` : ''}`], 'תבניות ומסמכים': [2, 1, 'ליווי', 'לקבל ערכת תבניות: הסכם, טופס קליטה ותמחור'], 'עזרה בשיווק': [2, 2, 'ליווי', 'פגישת אסטרטגיית שיווק'], 'עזרה בטכנולוגיה': [2, 2, 'ליווי', 'פגישת הטמעת כלים: יומן, ניהול לקוחות ותשלומים'], 'נטוורקינג וחיבורים': [2, 3, 'ליווי', 'חיבור לשלושה אנשי קשר רלוונטיים'], 'סדנאות': [3, 2, 'ליווי', 'להירשם לסדנה הקרובה שמתאימה למטרות'] };
+  (a.support || []).forEach((s) => SUP[s] && add({ p: SUP[s][0], ph: SUP[s][1], area: SUP[s][2], t: SUP[s][3], why: `ביקשת: ${s}.` }));
   add({ p: 0, ph: 4, area: 'סקירה', t: 'פגישת סיכום 90 יום: מה הושג, מה למדנו ומה היעדים לרבעון הבא', why: 'סוגרים מעגל ומתחילים את הרבעון הבא ממקום מדויק.' });
   // התאמה לזמן הפנוי: פחות שעות, פחות פעולות, ורק החשובות
-  const hrs = num(a.hours); const cap = hrs < 5 ? 6 : hrs < 15 ? 9 : 13;
+  const hrs = num(a.hours); const ready = num(a.readiness) || 7;
+  const cap = (hrs < 5 ? 6 : hrs < 15 ? 10 : 14) + (ready >= 8 ? 2 : 0) - (ready <= 4 ? 2 : 0); // מוכנות גבוהה: עוד שתי פעולות; נמוכה: שתיים פחות
   const seen = new Set(); const uniq = acts.filter((x) => (seen.has(x.t) ? false : seen.add(x.t)));
-  const chosen = uniq.map((x, i) => ({ ...x, i })).sort((x, y) => x.p - y.p || x.ph - y.ph || x.i - y.i).slice(0, cap).sort((x, y) => x.ph - y.ph || x.p - y.p || x.i - y.i);
+  const SPEC = { ans: 0, goal: 1, gap: 2, role: 3 }; // בשוויון עדיפות: מה שנגזר מהתשובות קודם לתבנית הכללית
+  const chosen = uniq.map((x, i) => ({ ...x, i })).sort((x, y) => x.p - y.p || SPEC[x.src] - SPEC[y.src] || x.ph - y.ph || x.i - y.i).slice(0, cap).sort((x, y) => x.ph - y.ph || x.p - y.p || x.i - y.i);
   const plan = chosen.map((x) => ({ id: uid(), title: x.t, area: x.area, phase: x.ph, why: x.why }));
+  const picked = new Set(chosen.map((x) => x.t)); // מה שלא נכנס בגלל הזמן הפנוי: מוצג כ"עוד פעולות מומלצות"
+  const more = uniq.filter((x) => !picked.has(x.t)).sort((x, y) => x.p - y.p || SPEC[x.src] - SPEC[y.src] || x.ph - y.ph).map((x) => ({ id: uid(), title: x.t, area: x.area, phase: x.ph, why: x.why }));
   const notes = [];
   notes.push({ 'נינוח': 'קצב נינוח: מומלץ לא יותר משתי פעולות פעילות במקביל.', 'מאוזן': 'קצב מאוזן: שלוש פעולות פעילות במקביל בערך.', 'מהיר': 'קצב מהיר: חשוב להקדיש זמן קבוע לסקירה כדי לא לפספס פרטים.' }[a.pace]);
   notes.push({ 'מנתח/ת': 'מקבל/ת החלטות לפי נתונים: מדוד את מה שמופיע בתוכנית, כך תרגיש/י ביטחון.', 'אינטואיטיבי/ת': 'מקבל/ת החלטות מהבטן: קבע/י רגע קצר של בדיקה מול נתון אחד לפני החלטות גדולות.', 'שיתופי/ת': 'מקבל/ת החלטות בשיתוף: תכנן/י מראש מי מתייעצים איתו בכל החלטה.' }[a.decision]);
   notes.push({ 'כתוב': 'תקשורת כתובה: עדכון קצר בכתב פעם בשבוע וסיכומי החלטות.', 'שיחה': 'תקשורת בשיחה: שיחת סנכרון קצרה קבועה, וסיכום בשורה אחת אחריה.', 'פגישות': 'תקשורת בפגישות: פגישה קבועה בלוח, עם סדר יום וסיכום.' }[a.comm]);
   if (hrs && hrs < 5) notes.push(`עם ${hrs} שעות בשבוע קיצרנו את התוכנית ל-${plan.length} הפעולות החשובות ביותר.`);
-  return { role: a.role, archetype: P_ARCH[top.k], ranked, low: low.map((s) => s.k), top: top.k, plan, notes: notes.filter(Boolean), createdAt: base };
+  if (ready <= 4) notes.push(`המוכנות כרגע ${ready} מתוך 10, ולכן התחלנו בקטן. אפשר להרחיב אחרי השלב הראשון.`);
+  if (ready >= 8) notes.push(`המוכנות גבוהה (${ready} מתוך 10), ולכן הוספנו עוד פעולות.`);
+  if ((a.values || []).length) notes.push(`ערכים מובילים: ${a.values.join(', ')}. כל פעולה בתוכנית צריכה להתיישב איתם, ואם לא, נשנה אותה.`);
+  if ((a.energyTake || []).length) notes.push(`מה שלוקח אנרגיה (${a.energyTake.join(', ')}): לקצר, לתזמן ${times.length ? `ל${times[0]}` : 'לזמן הכי טוב שלך'}, או להאציל.`);
+  if ((a.energyGive || []).length) notes.push(`מה שנותן אנרגיה (${a.energyGive.join(', ')}): נבנה סביבו את הפעולות המרכזיות.`);
+  if ((a.learning || []).length) notes.push(`חומרי למידה ותמיכה יינתנו בעיקר ב${a.learning.join(' / ')}.`);
+  if (times.length) notes.push(`זמני עבודה מועדפים: ${times.join(', ')}. פגישות קבועות ייקבעו בזמנים האלה.`);
+  const startDays = P_START_DAYS[a.start] || 0;
+  const kpis = [inc1 ? `הכנסה חודשית: ${money(inc0)} ← ${money(inc1)}` : '', num(a.clientsTarget) ? `לקוחות / מטופלים חדשים בחודש: ${num(a.clientsTarget)}` : '', num(a.hoursTarget) ? `שעות עבודה בשבוע: ${num(a.hoursTarget)}` : '', a.role === 'therapist' && num(a.target) ? `מטופלים בשבוע: ${num(a.load)} ← ${num(a.target)}` : ''].filter(Boolean);
+  return { role: a.role, archetype: P_ARCH[top.k], ranked, low: low.map((s) => s.k), top: top.k, plan, more, notes: notes.filter(Boolean), kpis, createdAt: base, startAt: base + startDays * 864e5 };
 }
 
 let wiz = null; // { step, data, editId } אשף האפיון (בזיכרון בלבד עד השמירה)
 let profOpen = null; // מזהה אפיון פתוח לצפייה
-const WIZ_STEPS = ['מי אתה', 'מטרות', 'חוזקות', 'סגנון עבודה', 'שאלות לתפקיד'];
+const WIZ_STEPS = ['מי אתה', 'רקע מקצועי', 'עסק וקהל', 'מטרות ויעדים', 'חוזקות', 'סגנון ואישיות', 'חסמים ותמיכה', 'שאלות לתפקיד'];
 function profileView() {
   if (wiz) return wizView();
   if (profOpen && by(S.profiles, profOpen)) return profileDetail(by(S.profiles, profOpen));
@@ -716,18 +779,42 @@ const wv = (k, d = '') => esc(wiz.data[k] ?? d);
 function wizView() {
   const d = wiz.data; const s = wiz.step; const last = s === WIZ_STEPS.length - 1;
   const sel = (k, opts, ph = '— בחר —') => `<select data-w="${k}"><option value="">${ph}</option>${opts.map((o) => `<option ${d[k] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  /* תגיות לבחירה מרובה; max = מספר מרבי (0 = ללא הגבלה) */
+  const chips = (k, opts, max = 0) => `<div class="chips" role="group">${opts.map((o) => `<label class="chip"><input type="checkbox" data-wg="${k}" ${max ? `data-max="${max}"` : ''} value="${esc(o)}" ${(d[k] || []).includes(o) ? 'checked' : ''}> ${esc(o)}</label>`).join('')}</div><p class="err hint" id="hint_${k}" role="alert"></p>`;
+  const inp = (k, label, type = 'text', extra = '') => `<label for="w_${k}">${label}</label><input id="w_${k}" data-w="${k}" type="${type}" value="${wv(k)}" ${extra}>`;
+  const tx = (k, label) => `<label for="w_${k}">${label}</label><textarea id="w_${k}" data-w="${k}">${wv(k)}</textarea>`;
+  const lab = (t, sub = '') => `<label>${t}${sub ? ` <span class="muted">${sub}</span>` : ''}</label>`;
   let body = '';
-  if (s === 0) body = `<label for="w_name">שם</label><input id="w_name" data-w="name" value="${wv('name')}" autocomplete="off">
-    <label>תפקיד</label><div class="chips">${Object.entries(P_ROLES).map(([k, v]) => `<label class="chip"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}> ${v}</label>`).join('')}</div>
-    <label>ניסיון בתחום</label>${sel('exp', ['עד שנה', '1 עד 3 שנים', '3 עד 7 שנים', 'מעל 7 שנים'])}
-    <label for="w_hours">כמה שעות בשבוע אפשר להקדיש לבנייה ולצמיחה?</label><input id="w_hours" data-w="hours" type="number" min="0" max="80" value="${wv('hours', '10')}">`;
-  if (s === 1) body = `<p class="muted">בחר עד שלוש מטרות מרכזיות.</p><div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
-    <p id="wizHint" class="err" role="alert"></p><label for="w_success">איך נראית הצלחה בעוד 90 יום?</label><textarea id="w_success" data-w="success">${wv('success')}</textarea>`;
-  if (s === 2) body = `<p class="muted">דרג/י את עצמך מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`;
-  if (s === 3) body = `<label>קצב עבודה מועדף</label>${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}<label>איך מקבלים החלטות?</label>${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}
-    <label>תקשורת מועדפת</label>${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}<label for="w_obst">מה הדבר שהכי מעכב אותך היום?</label><textarea id="w_obst" data-w="obstacle">${wv('obstacle')}</textarea>`;
-  if (s === 4) P_ROLE_Q[d.role].forEach((q) => { if (q.type === 'number' && d[q.k] === undefined) d[q.k] = String(q.def ?? 0); });
-  if (s === 4) body = P_ROLE_Q[d.role].map((q) => `<label ${q.opts ? '' : `for="w_${q.k}"`}>${q.label}</label>${q.opts ? sel(q.k, q.opts) : `<input id="w_${q.k}" data-w="${q.k}" type="${q.type || 'text'}" ${q.type === 'number' ? 'min="0"' : ''} value="${wv(q.k, q.def ?? '')}">`}`).join('');
+  if (s === 0) body = `${inp('name', 'שם', 'text', 'autocomplete="off"')}
+    ${lab('תפקיד')}<div class="chips">${Object.entries(P_ROLES).map(([k, v]) => `<label class="chip"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}> ${v}</label>`).join('')}</div>
+    <div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off"')}</div>
+    <div class="grid2">${inp('city', 'עיר / אזור')}<div>${lab('ניסיון בתחום')}${sel('exp', ['עד שנה', '1 עד 3 שנים', '3 עד 7 שנים', 'מעל 7 שנים'])}</div></div>
+    ${inp('hours', 'כמה שעות בשבוע אפשר להקדיש לבנייה ולצמיחה?', 'number', 'min="0" max="80"')}`;
+  if (s === 1) body = `${lab('תחומי התמחות', '(אפשר כמה)')}${chips('specialties', P_OPT.specialties)}${inp('specialtiesOther', 'תחום נוסף שלא ברשימה')}
+    ${lab('השכלה והסמכות', '(אפשר כמה)')}${chips('education', P_OPT.education)}${inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)')}
+    ${lab('שפות עבודה', '(אפשר כמה)')}${chips('languages', P_OPT.languages)}${inp('languagesOther', 'שפה נוספת')}`;
+  if (s === 2) body = `${lab('קהל יעד', '(אפשר כמה)')}${chips('audience', P_OPT.audience)}
+    ${lab('ערוצים וכלים שכבר בשימוש', '(אפשר כמה)')}${chips('channels', P_OPT.channels)}
+    <div class="grid3">${inp('incomeNow', 'הכנסה חודשית היום (₪)', 'number', 'min="0"')}${inp('incomeTarget', 'יעד הכנסה חודשית (₪)', 'number', 'min="0"')}${inp('price', 'מחיר לפגישה / שירות (₪)', 'number', 'min="0"')}</div>
+    ${lab('תקציב להשקעה ברבעון הקרוב')}${sel('budget', P_OPT.budget)}`;
+  if (s === 3) body = `${lab('מטרות מרכזיות', '(עד שלוש)')}<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" data-max="3" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>
+    ${tx('success', 'איך נראית הצלחה בעוד 90 יום?')}
+    <div class="grid2">${inp('clientsTarget', 'יעד לקוחות / מטופלים חדשים בחודש', 'number', 'min="0"')}${inp('hoursTarget', 'יעד שעות עבודה בשבוע', 'number', 'min="0" max="80"')}</div>`;
+  if (s === 4) body = `<p class="muted">דרג/י את עצמך מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`;
+  if (s === 5) body = `<div class="grid3"><div>${lab('קצב עבודה')}${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}</div><div>${lab('קבלת החלטות')}${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}</div><div>${lab('תקשורת מועדפת')}${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}</div></div>
+    ${lab('ערכים מובילים', '(עד שלושה)')}${chips('values', P_OPT.values, 3)}
+    ${lab('מה נותן לך אנרגיה?', '(אפשר כמה)')}${chips('energyGive', P_OPT.energy)}
+    ${lab('מה לוקח ממך אנרגיה?', '(אפשר כמה)')}${chips('energyTake', P_OPT.energy)}
+    ${lab('זמני עבודה מועדפים', '(אפשר כמה)')}${chips('times', P_OPT.times)}
+    ${lab('איך הכי נוח לך ללמוד?', '(אפשר כמה)')}${chips('learning', P_OPT.learning)}`;
+  if (s === 6) body = `${lab('מה מעכב אותך היום?', '(אפשר כמה)')}${chips('barriers', P_OPT.barriers)}${tx('obstacle', 'במילים שלך')}
+    ${lab('איזו תמיכה היית רוצה מאיתנו?', '(אפשר כמה)')}${chips('support', P_OPT.support)}
+    <div class="q"><span>עד כמה את/ה מוכן/ה להתחיל עכשיו? (1 עד 10)</span><span class="rate"><input type="range" min="1" max="10" step="1" data-w="readiness" value="${d.readiness || 7}" aria-label="מוכנות"><output>${d.readiness || 7}</output></span></div>
+    ${lab('מתי אפשר להתחיל?')}${sel('start', P_OPT.start)}`;
+  if (s === 7) {
+    P_ROLE_Q[d.role].forEach((q) => { if (q.type === 'number' && d[q.k] === undefined) d[q.k] = String(q.def ?? 0); });
+    body = P_ROLE_Q[d.role].map((q) => `<label ${q.opts ? '' : `for="w_${q.k}"`}>${q.label}</label>${q.opts ? sel(q.k, q.opts) : `<input id="w_${q.k}" data-w="${q.k}" type="${q.type || 'text'}" ${q.type === 'number' ? 'min="0"' : ''} value="${wv(q.k, q.def ?? '')}">`}`).join('');
+  }
   return `<h1>${wiz.editId ? 'עריכת אפיון' : 'אפיון אישי'}</h1><div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
   ${body}<p id="wizErr" class="err" role="alert"></p><div class="row"><button class="pri" data-do="wizNext">${last ? 'צור תוכנית' : 'הבא'}</button>${s > 0 ? '<button data-do="wizBack">הקודם</button>' : ''}<button class="tour-x" data-do="wizCancel">ביטול</button></div></div>`;
 }
@@ -735,29 +822,44 @@ function wizCheck() {
   const d = wiz.data; const s = wiz.step;
   if (s === 0 && !(d.name || '').trim()) return 'יש להזין שם';
   if (s === 0 && !d.role) return 'יש לבחור תפקיד';
-  if (s === 1 && !(d.goals || []).length) return 'יש לבחור לפחות מטרה אחת';
+  if (s === 0 && d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) return 'כתובת המייל אינה תקינה';
+  if (s === 3 && !(d.goals || []).length) return 'יש לבחור לפחות מטרה אחת';
   return '';
 }
 document.addEventListener('input', (ev) => {
   const t = ev.target; if (!wiz || !t.dataset) return;
-  if (t.dataset.wg) { // קבוצת תיבות סימון (עד 3)
-    const cur = new Set(wiz.data[t.dataset.wg] || []);
-    if (t.checked) { if (cur.size >= 3) { t.checked = false; const h = $('#wizHint'); if (h) h.textContent = 'אפשר לבחור עד שלוש מטרות'; return; } cur.add(t.value); } else cur.delete(t.value);
-    wiz.data[t.dataset.wg] = [...cur]; const h = $('#wizHint'); if (h) h.textContent = '';
+  if (t.dataset.wg) { // תגיות לבחירה מרובה, עם מגבלה אופציונלית
+    const k = t.dataset.wg; const max = num(t.dataset.max); const h = $('#hint_' + k);
+    const cur = new Set(wiz.data[k] || []);
+    if (t.checked) { if (max && cur.size >= max) { t.checked = false; if (h) h.textContent = `אפשר לבחור עד ${max}`; return; } cur.add(t.value); } else cur.delete(t.value);
+    wiz.data[k] = [...cur]; if (h) h.textContent = '';
   } else if (t.dataset.w) { wiz.data[t.dataset.w] = t.value; if (t.type === 'range') t.nextElementSibling.textContent = t.value; }
 });
 function profileDetail(p) {
-  const sk = [...p.ranked].sort((x, y) => y.v - x.v); const day = (n) => pDate(p.createdAt, n);
+  const sk = [...p.ranked].sort((x, y) => y.v - x.v); const day = (n) => pDate(planBase(p), n); const A = p.answers;
+  const tags = (arr) => (arr || []).filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join(' ');
+  const row = (k, v) => (v ? `<div class="kv"><span class="muted">${k}</span><span>${v}</span></div>` : '');
   const byPhase = [1, 2, 3, 4].map((ph) => ({ ph, items: p.plan.filter((x) => x.phase === ph) })).filter((g) => g.items.length);
   return `<div class="bar"><h1 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span></h1><span><button data-do="profBack">← כל האפיונים</button> <button data-do="profEdit" data-id="${p.id}">עריכת אפיון</button></span></div>
   <div class="card"><h2>${esc(p.archetype)}</h2><p>החוזקה הבולטת: <b>${esc(P_SKILLS[p.top])}</b>. תחומים לחיזוק: <b>${p.low.map((k) => esc(P_SKILLS[k])).join(', ')}</b>.</p>
   ${sk.map((s) => `<div style="margin:8px 0"><div class="bar" style="margin:0"><span>${esc(P_SKILLS[s.k])}</span><b>${s.v}/5</b></div><div class="meter"><i style="width:${s.v * 20}%;background:${s.v <= 2 ? 'var(--warn)' : 'var(--ok)'}"></i></div></div>`).join('')}
   ${(p.answers.goals || []).length ? `<p style="margin-top:12px">מטרות: ${(p.answers.goals || []).map((g) => `<span class="tag">${esc(P_GOALS[g])}</span>`).join(' ')}</p>` : ''}
   ${p.answers.success ? `<p>הצלחה בעוד 90 יום, במילים שלך: <i>${esc(p.answers.success)}</i></p>` : ''}</div>
+  ${(p.kpis || []).length ? `<div class="card"><h2>מדדי הצלחה ל-90 יום</h2><div class="grid">${p.kpis.map((k) => `<div class="stat"><b style="font-size:17px">${esc(k.split(': ')[1])}</b><span>${esc(k.split(': ')[0])}</span></div>`).join('')}</div></div>` : ''}
+
   <div class="card"><div class="bar"><h2 style="margin:0">תוכנית אישית ל-90 יום</h2>${p.tasksAdded ? '<span class="tag ok">נוספה למשימות</span>' : '<button class="pri" data-do="profTasks" data-id="' + p.id + '">הוסף את התוכנית למשימות</button>'}</div>
   ${byPhase.map((g) => `<h3 style="margin:14px 0 6px">${esc(P_PHASES[g.ph].label)} <span class="muted" style="font-weight:400">· עד ${esc(day(P_PHASES[g.ph].days))}</span></h3><ol>${g.items.map((x) => `<li style="margin-bottom:6px"><b>${esc(x.title)}</b> <span class="tag">${esc(x.area)}</span><br><span class="muted">${esc(x.why)}</span></li>`).join('')}</ol>`).join('')}
   ${p.tasksAdded ? '<p class="muted">אפשר למצוא את התוכנית בלשונית "משימות", עם תאריכים ותתי-משימות שאפשר לתעדף בגרירה.</p>' : '<p class="muted">לחיצה על "הוסף למשימות" יוצרת משימה לכל שלב, עם תתי-משימות ותאריכי יעד.</p>'}</div>
-  <div class="card"><h2>איך נעבוד ביחד</h2><ul>${p.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul><p class="muted">התוכנית היא המלצה כללית לתכנון עבודה, ואינה ייעוץ משפטי, פיננסי או רפואי.</p></div>`;
+  ${(p.more || []).length ? `<div class="card"><h2>עוד פעולות מומלצות</h2><p class="muted">לא נכנסו לתוכנית כדי לשמור על היקף שמתאים לזמן שהגדרת. אפשר להוסיף כל אחת בלחיצה.</p>
+  <ul class="more">${p.more.map((x) => `<li><span><b>${esc(x.title)}</b> <span class="tag">${esc(x.area)}</span> <span class="muted">· ${esc(P_PHASES[x.phase].label.split(':')[0])}</span><br><span class="muted">${esc(x.why)}</span></span>${p.tasksAdded ? '' : `<button class="sm" data-do="profMore" data-id="${p.id}" data-mid="${x.id}">+ הוסף לתוכנית</button>`}</li>`).join('')}</ul>
+  ${p.tasksAdded ? '<p class="muted">התוכנית כבר הועברה למשימות. אפשר להוסיף פעולות כתתי-משימות ישירות בלשונית "משימות".</p>' : ''}</div>` : ''}
+  <div class="card"><h2>איך נעבוד ביחד</h2><ul>${p.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul><p class="muted">התוכנית היא המלצה כללית לתכנון עבודה, ואינה ייעוץ משפטי, פיננסי או רפואי.</p></div>
+  <details class="card details"><summary><h2>פרטים ורקע</h2> <span class="muted">(לחץ לפתיחה)</span></summary>
+  ${row('טלפון', A.phone ? `<span dir="ltr">${esc(A.phone)}</span>` : '')}${row('מייל', A.email ? `<span dir="ltr">${esc(A.email)}</span>` : '')}${row('עיר / אזור', esc(A.city || ''))}${row('ניסיון', esc(A.exp || ''))}
+  ${row('התמחות', tags([...(A.specialties || []), A.specialtiesOther]))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
+  ${row('קהל יעד', tags(A.audience))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
+  ${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
+  ${row('חסמים', tags(A.barriers))}${row('תמיכה מבוקשת', tags(A.support))}${row('מוכנות', A.readiness ? esc(A.readiness) + ' / 10' : '')}${row('התחלה', esc(A.start || ''))}</details>`;
 }
 
 /* ---------- ניהול (מנהל בלבד, קריאה בלבד) ---------- */

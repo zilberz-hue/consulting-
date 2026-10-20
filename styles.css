@@ -89,3 +89,8 @@ tbody[data-open] tr.trow,tr[data-sub][data-open]{cursor:grab}
 input,select,textarea,progress{accent-color:var(--pri)}
 .searchbar{margin-bottom:10px}.searchbar input{max-width:420px}
 mark{background:#f3dfb0;background:color-mix(in srgb,var(--pri) 30%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+.grid2,.grid3{display:grid;gap:0 12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.hint{margin:0 0 4px;min-height:0;font-size:13px;color:var(--warn)}
+.kv{display:flex;gap:12px;padding:5px 0;border-bottom:1px dashed var(--line);align-items:baseline;flex-wrap:wrap}.kv>span:first-child{min-width:110px}
+.more{list-style:none;padding:0;margin:0}.more li{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line)}.more li button{flex:none}
+.details summary{cursor:pointer;list-style:none;display:flex;gap:8px;align-items:baseline}.details summary h2{margin:0}.details[open] summary{margin-bottom:8px}.details summary::-webkit-details-marker{display:none}
