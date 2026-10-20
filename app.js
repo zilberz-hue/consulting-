@@ -1,6 +1,6 @@
 'use strict';
 document.documentElement.lang = 'he'; document.documentElement.dir = 'rtl';
-/* יועץ עסקי. ללא הגדרת Firebase הנתונים נשמרים ב-localStorage; עם הגדרה (cloud.js) יש התחברות, שמירה בענן ושוק משותף. */
+/* טייזון – היועץ העסקי שלך. ללא הגדרת Firebase הנתונים נשמרים ב-localStorage; עם הגדרה (cloud.js) יש התחברות, שמירה בענן ושוק משותף. */
 const Cloud = window.Cloud || { enabled: false };
 let me = null; // המשתמש המחובר (מצב ענן)
 let M = []; // בקשות השוק המשותף (מצב ענן)
@@ -107,6 +107,7 @@ const VIEWS = {
   market: ['שוק ייעוץ', market],
 };
 function render() {
+  const io = intakeOwner(); if (io) return renderIntake(io); // שאלון ציבורי ללקוח: בלי התחברות ובלי תפריט
   if (Cloud.enabled && (loading || !me)) {
     tourClear(); // אם התנתקו באמצע ההדרכה, לא משאירים את החלון מעל מסך הכניסה
     $('#nav').innerHTML = '';
@@ -534,7 +535,7 @@ const ACTIONS = {
     });
   },
   profNew: () => { wiz = { step: 0, data: { hours: '10', readiness: '7', languages: ['עברית'] }, editId: null }; profOpen = null; render(); scrollTo(0, 0); },
-  profOpen: (id) => { profOpen = id; render(); scrollTo(0, 0); },
+  profOpen: (id) => { profOpen = id; const p = by(S.profiles, id); if (p?.isNew) { delete p.isNew; save(); } render(); scrollTo(0, 0); },
   profBack: () => { profOpen = null; render(); },
   profEdit: (id) => { wiz = { step: 0, data: JSON.parse(JSON.stringify(by(S.profiles, id).answers)), editId: id }; profOpen = null; render(); scrollTo(0, 0); },
   profDel: (id) => ask('למחוק את האפיון והתוכנית? משימות שכבר נוצרו מהתוכנית יישארו.', () => { S.profiles = S.profiles.filter((x) => x.id !== id); if (profOpen === id) profOpen = null; save(); render(); }),
@@ -553,11 +554,19 @@ const ACTIONS = {
   wizNext: () => {
     const e = wizCheck(); if (e) { $('#wizErr').textContent = e; return; }
     if (wiz.step < WIZ_STEPS.length - 1) { wiz.step++; render(); scrollTo(0, 0); return; }
+    if (wiz.public) return submitIntake();
     const d = wiz.data; const base = Date.now(); const b = buildProfile(d, base);
     const rec = { id: wiz.editId || uid(), name: d.name.trim(), role: d.role, answers: d, archetype: b.archetype, ranked: b.ranked, low: b.low, top: b.top, plan: b.plan, more: b.more, notes: b.notes, kpis: b.kpis, createdAt: base, startAt: b.startAt, tasksAdded: false };
     const i = S.profiles.findIndex((x) => x.id === rec.id); if (i >= 0) S.profiles[i] = rec; else S.profiles.push(rec);
     profOpen = rec.id; wiz = null; save(); render(); scrollTo(0, 0);
   },
+  pubSave: async () => {
+    const f = { enabled: $('#pf_on').checked, bookingUrl: $('#pf_book').value.trim(), title: $('#pf_title').value.trim() };
+    if (f.bookingUrl && !/^https:\/\/\S+$/.test(f.bookingUrl)) { $('#pf_err').textContent = 'הקישור צריך להתחיל ב-https://'; return; }
+    const r = await Cloud.savePublicForm(me.uid, f); if (!r.ok) { $('#pf_err').textContent = r.error; return; }
+    pubOwn = f; render();
+  },
+  pubCopy: () => { const i = $('#pf_link'); i.select(); (navigator.clipboard?.writeText(i.value) || Promise.reject()).then(() => { const b = document.querySelector('[data-do=pubCopy]'); if (b) b.textContent = 'הועתק ✓'; }).catch(() => document.execCommand?.('copy')); },
   saveRetry: () => Cloud.retryNow(),
   logout: async () => { await Cloud.signOut(); },
   adminRefresh: () => { adminData = null; render(); },
@@ -602,6 +611,7 @@ const P_OPT = {
   support: ['ליווי שבועי', 'סדנאות', 'תבניות ומסמכים', 'עזרה בשיווק', 'עזרה בטכנולוגיה', 'נטוורקינג וחיבורים'],
   start: ['מיד', 'תוך שבועיים', 'תוך חודש', 'בעוד יותר מחודש'],
 };
+const P_EXP = ['עד שנה', '1 עד 3 שנים', '3 עד 7 שנים', '7 עד 15 שנים', '15 עד 20 שנים', 'מעל 20 שנה'];
 const P_START_DAYS = { 'מיד': 0, 'תוך שבועיים': 14, 'תוך חודש': 30, 'בעוד יותר מחודש': 45 };
 const planBase = (p) => p.startAt || p.createdAt; // תאריך תחילת התוכנית
 const P_ROLE_Q = {
@@ -765,12 +775,14 @@ let wiz = null; // { step, data, editId } אשף האפיון (בזיכרון ב
 let profOpen = null; // מזהה אפיון פתוח לצפייה
 const WIZ_STEPS = ['מי אתה', 'רקע מקצועי', 'עסק וקהל', 'מטרות ויעדים', 'חוזקות', 'סגנון ואישיות', 'חסמים ותמיכה', 'שאלות לתפקיד'];
 function profileView() {
+  if (wiz?.public) wiz = null; // חזרה מתצוגה מקדימה של השאלון הציבורי
   if (wiz) return wizView();
   if (profOpen && by(S.profiles, profOpen)) return profileDetail(by(S.profiles, profOpen));
   const list = S.profiles;
   return `<h1>אפיון אישי</h1><p class="muted">שאלון קצר לכל שותף, מייסד או מטפל. בסופו מתקבלת תוכנית אישית ל-90 יום, שאפשר להפוך בלחיצה למשימות עם תאריכים.</p>
+  ${intakeCard()}
   <div class="bar"><span class="muted">${list.length ? list.length + ' אפיונים' : ''}</span><button class="pri" data-do="profNew">+ אפיון חדש</button></div>
-  ${list.length ? list.map((p) => `<div class="card"><div class="bar" style="margin:0"><div><h2 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span> ${p.tasksAdded ? '<span class="tag ok">התוכנית במשימות</span>' : ''}</h2>
+  ${list.length ? list.map((p) => `<div class="card"><div class="bar" style="margin:0"><div><h2 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span> ${p.isNew ? '<span class="tag warn">חדש</span>' : ''} ${p.source === 'client' ? '<span class="tag">מולא ע״י הלקוח</span>' : ''} ${p.tasksAdded ? '<span class="tag ok">התוכנית במשימות</span>' : ''}</h2>
     <span class="muted">${esc(p.archetype)} · ${p.plan.length} פעולות · ${esc(new Date(p.createdAt).toLocaleDateString('he-IL'))}</span></div>
     <span><button class="sm pri" data-do="profOpen" data-id="${p.id}">פתח תוכנית</button> <button class="sm" data-do="profEdit" data-id="${p.id}">עריכת אפיון</button> <button class="sm del" data-do="profDel" data-id="${p.id}">מחיקה</button></span></div></div>`).join('')
     : '<div class="card empty"><p>עוד לא מולא אפיון.</p><button class="pri" data-do="profNew">התחל אפיון ראשון</button></div>'}`;
@@ -788,7 +800,7 @@ function wizView() {
   if (s === 0) body = `${inp('name', 'שם', 'text', 'autocomplete="off"')}
     ${lab('תפקיד')}<div class="chips">${Object.entries(P_ROLES).map(([k, v]) => `<label class="chip"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}> ${v}</label>`).join('')}</div>
     <div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off"')}</div>
-    <div class="grid2">${inp('city', 'עיר / אזור')}<div>${lab('ניסיון בתחום')}${sel('exp', ['עד שנה', '1 עד 3 שנים', '3 עד 7 שנים', 'מעל 7 שנים'])}</div></div>
+    <div class="grid2">${inp('city', 'עיר / אזור')}<div>${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div></div>
     ${inp('hours', 'כמה שעות בשבוע אפשר להקדיש לבנייה ולצמיחה?', 'number', 'min="0" max="80"')}`;
   if (s === 1) body = `${lab('תחומי התמחות', '(אפשר כמה)')}${chips('specialties', P_OPT.specialties)}${inp('specialtiesOther', 'תחום נוסף שלא ברשימה')}
     ${lab('השכלה והסמכות', '(אפשר כמה)')}${chips('education', P_OPT.education)}${inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)')}
@@ -797,7 +809,7 @@ function wizView() {
     ${lab('ערוצים וכלים שכבר בשימוש', '(אפשר כמה)')}${chips('channels', P_OPT.channels)}
     <div class="grid3">${inp('incomeNow', 'הכנסה חודשית היום (₪)', 'number', 'min="0"')}${inp('incomeTarget', 'יעד הכנסה חודשית (₪)', 'number', 'min="0"')}${inp('price', 'מחיר לפגישה / שירות (₪)', 'number', 'min="0"')}</div>
     ${lab('תקציב להשקעה ברבעון הקרוב')}${sel('budget', P_OPT.budget)}`;
-  if (s === 3) body = `${lab('מטרות מרכזיות', '(עד שלוש)')}<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" data-max="3" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>
+  if (s === 3) body = `${lab('מטרות מרכזיות', '(עד שש)')}<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" data-max="6" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>
     ${tx('success', 'איך נראית הצלחה בעוד 90 יום?')}
     <div class="grid2">${inp('clientsTarget', 'יעד לקוחות / מטופלים חדשים בחודש', 'number', 'min="0"')}${inp('hoursTarget', 'יעד שעות עבודה בשבוע', 'number', 'min="0" max="80"')}</div>`;
   if (s === 4) body = `<p class="muted">דרג/י את עצמך מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`;
@@ -815,8 +827,10 @@ function wizView() {
     P_ROLE_Q[d.role].forEach((q) => { if (q.type === 'number' && d[q.k] === undefined) d[q.k] = String(q.def ?? 0); });
     body = P_ROLE_Q[d.role].map((q) => `<label ${q.opts ? '' : `for="w_${q.k}"`}>${q.label}</label>${q.opts ? sel(q.k, q.opts) : `<input id="w_${q.k}" data-w="${q.k}" type="${q.type || 'text'}" ${q.type === 'number' ? 'min="0"' : ''} value="${wv(q.k, q.def ?? '')}">`}`).join('');
   }
-  return `<h1>${wiz.editId ? 'עריכת אפיון' : 'אפיון אישי'}</h1><div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
-  ${body}<p id="wizErr" class="err" role="alert"></p><div class="row"><button class="pri" data-do="wizNext">${last ? 'צור תוכנית' : 'הבא'}</button>${s > 0 ? '<button data-do="wizBack">הקודם</button>' : ''}<button class="tour-x" data-do="wizCancel">ביטול</button></div></div>`;
+  if (s === 0 && wiz.public) body += '<input class="hp" data-w="website" tabindex="-1" autocomplete="off" aria-hidden="true" placeholder="website">'; // מלכודת לבוטים
+  const h1 = wiz.public ? esc(pub.form?.title || 'שאלון היכרות') : wiz.editId ? 'עריכת אפיון' : 'אפיון אישי';
+  return `<h1>${h1}</h1><div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
+  ${body}<p id="wizErr" class="err" role="alert"></p><div class="row"><button class="pri" data-do="wizNext">${last ? (wiz.public ? 'שליחה' : 'צור תוכנית') : 'הבא'}</button>${s > 0 ? '<button data-do="wizBack">הקודם</button>' : ''}${wiz.public ? '' : '<button class="tour-x" data-do="wizCancel">ביטול</button>'}</div></div>`;
 }
 function wizCheck() {
   const d = wiz.data; const s = wiz.step;
@@ -860,6 +874,78 @@ function profileDetail(p) {
   ${row('קהל יעד', tags(A.audience))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
   ${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
   ${row('חסמים', tags(A.barriers))}${row('תמיכה מבוקשת', tags(A.support))}${row('מוכנות', A.readiness ? esc(A.readiness) + ' / 10' : '')}${row('התחלה', esc(A.start || ''))}</details>`;
+}
+
+
+/* ---------- שאלון ללקוח בקישור (#intake/<uid>) ---------- */
+const intakeOwner = () => (location.hash.match(/^#intake\/([A-Za-z0-9_-]{6,128})$/) || [])[1];
+let pub = { owner: null, form: undefined, done: false, sending: false }; // מצב הדף הציבורי
+function renderIntake(owner) {
+  tourClear(); $('#nav').innerHTML = '';
+  if (!Cloud.enabled) { $('#view').innerHTML = '<div class="card empty">השאלון זמין רק באתר המחובר לענן.</div>'; return; }
+  if (pub.owner !== owner) { pub = { owner, form: undefined, done: false, sending: false }; wiz = null; Cloud.getPublicForm(owner).then((f) => { pub.form = f; render(); }); }
+  if (pub.form === undefined) { $('#view').innerHTML = '<div class="empty">טוען…</div>'; return; }
+  if (!pub.form || !pub.form.enabled) { $('#view').innerHTML = '<div class="card empty"><h2>השאלון אינו זמין כרגע</h2><p>אפשר לפנות ישירות למי ששלח לך את הקישור.</p></div>'; return; }
+  const url = pub.form.bookingUrl;
+  if (pub.done) {
+    $('#view').innerHTML = `<div class="card wiz"><h1>תודה! התשובות התקבלו</h1>${url ? `<p>עכשיו נקבע פגישה. מעבירים אותך לדף קביעת הפגישה…</p><p><a class="btn pri" href="${esc(url)}">לקביעת פגישה</a></p>` : '<p>ניצור איתך קשר בקרוב לקביעת פגישה.</p>'}</div>`;
+    return;
+  }
+  if (!wiz || !wiz.public) wiz = { step: 0, data: { hours: '10', readiness: '7', languages: ['עברית'] }, public: true };
+  $('#view').innerHTML = `${wiz.step === 0 ? '<p class="muted">שאלון היכרות קצר (כ-7 דקות). התשובות יעזרו לנו להכין לך תוכנית עבודה אישית. בסוף תועבר/י לקביעת פגישה.</p>' : ''}${wizView()}`;
+}
+/* תשובות שמגיעות מבחוץ: רק מפתחות פשוטים, מחרוזות קצרות ורשימות קצרות */
+function cleanAnswers(src) {
+  const out = {}; let n = 0;
+  for (const [k, v] of Object.entries(src || {})) {
+    if (k === 'website' || !/^[A-Za-z_]{1,30}$/.test(k) || ++n > 90) continue;
+    if (typeof v === 'string' || typeof v === 'number') out[k] = String(v).slice(0, 600);
+    else if (Array.isArray(v)) out[k] = v.filter((x) => typeof x === 'string').slice(0, 20).map((x) => x.slice(0, 120));
+  }
+  if (!P_ROLES[out.role]) out.role = 'founder';
+  out.name = (out.name || '').trim().slice(0, 80) || 'לקוח/ה ללא שם';
+  return out;
+}
+async function submitIntake() {
+  if (pub.sending) return; pub.sending = true;
+  const b = document.querySelector('[data-do=wizNext]'); if (b) { b.disabled = true; b.textContent = 'שולח…'; }
+  if (!wiz.data.website) { // בוט שמילא את המלכודת מקבל "הצלחה" בלי שמירה
+    const r = await Cloud.submitIntake(pub.owner, cleanAnswers(wiz.data));
+    if (!r.ok) { pub.sending = false; if (b) { b.disabled = false; b.textContent = 'שליחה'; } const e = $('#wizErr'); if (e) e.textContent = 'השליחה נכשלה: ' + r.error + '. נסה/י שוב.'; return; }
+  }
+  pub.done = true; wiz = null; render();
+  const url = pub.form?.bookingUrl; if (url && /^https:\/\//.test(url)) setTimeout(() => { location.href = url; }, 1800);
+}
+/* בצד שלך: כל שאלון שמגיע הופך לאפיון עם תוכנית, ואז נמחק מתיבת הדואר הנכנס */
+async function importIntakes(list) {
+  if (!me || !list.length) return;
+  const fresh = []; const done = [];
+  for (const d of list) {
+    if (by(S.profiles, d.id)) { done.push(d.id); continue; } // כבר יובא (המחיקה לא הספיקה)
+    let ans; try { ans = cleanAnswers(JSON.parse(d.answers || '{}')); } catch { done.push(d.id); continue; }
+    const base = num(d.createdAt) || Date.now(); const b = buildProfile(ans, base);
+    S.profiles.push({ id: d.id, name: ans.name, role: ans.role, answers: ans, archetype: b.archetype, ranked: b.ranked, low: b.low, top: b.top, plan: b.plan, more: b.more, notes: b.notes, kpis: b.kpis, createdAt: base, startAt: b.startAt, tasksAdded: false, source: 'client', isNew: true });
+    fresh.push(ans.name); done.push(d.id);
+  }
+  if (fresh.length) { save(); render(); setTimeout(() => note(`התקבל${fresh.length > 1 ? 'ו' : ''} שאלון${fresh.length > 1 ? 'ים' : ''} חדש${fresh.length > 1 ? 'ים' : ''} מלקוחות: ${fresh.join(', ')}. האפיון והתוכנית מחכים בלשונית "אפיון אישי".`), 200); }
+  await Cloud.flush(); // מוחקים רק אחרי שהאפיון נשמר בענן, כדי לא לאבד תשובות
+  if (saveStatus.st !== 'error') done.forEach((id) => Cloud.deleteIntake(id));
+}
+let pubOwn; // הגדרות הטופס שלך (נטען בכניסה ללשונית)
+function intakeCard() {
+  if (!Cloud.enabled) return '<div class="card"><h2>שליחת שאלון ללקוחות</h2><p class="muted">זמין באתר המחובר לענן: הלקוח ממלא בקישור, והתשובות נכנסות לכאן אוטומטית.</p></div>';
+  if (pubOwn === undefined) { pubOwn = null; Cloud.getPublicForm(me.uid).then((f) => { pubOwn = f || { enabled: false, bookingUrl: '', title: '' }; if (curView() === 'profile') render(); }); }
+  if (!pubOwn) return '<div class="card"><h2>שליחת שאלון ללקוחות</h2><div class="muted">טוען…</div></div>';
+  const link = `${location.origin}${location.pathname}#intake/${me.uid}`;
+  const msg = encodeURIComponent(`שלום! לפני הפגישה, אשמח שתמלא/י שאלון היכרות קצר: ${link}`);
+  return `<div class="card"><div class="bar" style="margin:0"><h2 style="margin:0">שליחת שאלון ללקוחות</h2><span class="tag ${pubOwn.enabled ? 'ok' : ''}">${pubOwn.enabled ? 'פעיל' : 'כבוי'}</span></div>
+  <p class="muted">הלקוח ממלא בקישור בלי להירשם. התשובות נכנסות לכאן אוטומטית כאפיון עם תוכנית, והלקוח מועבר מיד לקביעת פגישה.</p>
+  <label class="chip" style="margin:6px 0"><input type="checkbox" id="pf_on" ${pubOwn.enabled ? 'checked' : ''}> השאלון פתוח לקבלת תשובות</label>
+  <label for="pf_book">קישור לקביעת פגישה (Calendly, יומן Google וכו')</label><input id="pf_book" type="url" dir="ltr" placeholder="https://calendly.com/..." value="${esc(pubOwn.bookingUrl || '')}">
+  <label for="pf_title">כותרת השאלון (לא חובה)</label><input id="pf_title" placeholder="שאלון היכרות" value="${esc(pubOwn.title || '')}">
+  <p id="pf_err" class="err" role="alert"></p><div class="row"><button class="pri" data-do="pubSave">שמירה</button></div>
+  ${pubOwn.enabled ? `<label>הקישור לשליחה</label><div class="linkbox"><input id="pf_link" readonly dir="ltr" value="${esc(link)}"><button data-do="pubCopy">העתקה</button></div>
+  <div class="row"><a class="btn" href="https://wa.me/?text=${msg}" target="_blank" rel="noopener">שליחה בוואטסאפ</a><a class="btn" href="mailto:?subject=${encodeURIComponent('שאלון היכרות')}&body=${msg}">שליחה במייל</a><a class="btn" href="${esc(link)}" target="_blank" rel="noopener">תצוגה מקדימה</a></div>` : '<p class="muted">סמן "פתוח" ושמור כדי לקבל קישור.</p>'}</div>`;
 }
 
 /* ---------- ניהול (מנהל בלבד, קריאה בלבד) ---------- */
@@ -909,7 +995,7 @@ async function loadAdmin() {
 const curView = () => (location.hash || '#dashboard').slice(1);
 const navTo = (v) => `a[href="#${v}"]`;
 const TOUR = [
-  { title: 'ברוכים הבאים ליועץ עסקי', text: 'הדרכה קצרה של כ-3 דקות: ניצור לקוח ופרויקט, נרשום שעות ונפיק חשבונית, ונכיר את האבחון, התחזית והשוק. אפשר לצאת בכל רגע.' },
+  { title: 'ברוכים הבאים לטייזון', text: 'הדרכה קצרה של כ-3 דקות: ניצור לקוח ופרויקט, נרשום שעות ונפיק חשבונית, ונכיר את האבחון, התחזית והשוק. אפשר לצאת בכל רגע.' },
   { go: 'dashboard', target: '#view .grid', title: 'לוח הבקרה', text: 'כאן רואים במבט אחד כמה לקוחות ופרויקטים פעילים, כמה שעות עוד לא חויבו, מה פתוח לגבייה ומה כבר שולם.' },
   { target: navTo('clients'), title: 'לקוחות ופרויקטים', text: 'כל מודול נמצא בלשונית משלו. לחץ על "לקוחות ופרויקטים".', done: () => curView() === 'clients' },
   { target: '[data-do=clientNew]', title: 'הוספת לקוח', text: 'לחץ על "+ לקוח", הקלד שם ושמור.', snap: () => S.clients.length, done: (b) => S.clients.length > b },
@@ -979,7 +1065,7 @@ if (Cloud.enabled) {
   window.addEventListener('pagehide', () => Cloud.flush());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') Cloud.flush(); }); // מעבר לטאב אחר או נעילת מסך
   Cloud.init(async (user) => {
-    if (!user) { me = null; isAdmin = false; adminData = null; adminUser = null; S = empty(); M = []; tour = null; tourAutoTried = false; Cloud.stopMarket(); loading = false; return render(); }
+    if (!user) { me = null; pubOwn = undefined; isAdmin = false; adminData = null; adminUser = null; S = empty(); M = []; tour = null; tourAutoTried = false; Cloud.stopMarket(); loading = false; return render(); }
     me = user; loading = true; isAdmin = false; adminData = null; adminUser = null; render();
     try {
       let data = await Cloud.loadWorkspace(user.uid);
@@ -996,6 +1082,7 @@ if (Cloud.enabled) {
       isAdmin = await Cloud.isAdmin(user.uid);
       Cloud.watchWorkspace(user.uid, (remote) => { S = Object.assign(empty(), remote); render(); });
       Cloud.watchRequests(user.uid, (list) => { M = list; if (location.hash === '#market') render(); });
+      Cloud.watchIntakes(user.uid, importIntakes); // שאלונים מלקוחות נכנסים אוטומטית
     } catch (e) { note('שגיאה בטעינת הנתונים: ' + (e.message || e)); }
     loading = false; render();
   });

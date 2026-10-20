@@ -71,6 +71,7 @@
   }
 
   /* ----- שוק ----- */
+  let intakeUnsub = null; // שאלונים שלקוחות שלחו
   let reqUnsub = null; const quoteUnsubs = new Map(); const quotes = new Map(); let requests = [];
 
   function stopMarket() {
@@ -88,7 +89,7 @@
       if (!(id || '').includes('@')) return Promise.resolve({ ok: false, error: 'איפוס במייל זמין רק למי שנרשם עם מייל. למשתמש עם שם משתמש יש לבקש מהמנהל לאפס את הסיסמה.' });
       return wrap(auth.sendPasswordResetEmail(id.trim()));
     },
-    signOut: async () => { await window.Cloud.flush(); stopMarket(); wsUnsub?.(); wsUnsub = null; return auth.signOut(); },
+    signOut: async () => { await window.Cloud.flush(); stopMarket(); intakeUnsub?.(); intakeUnsub = null; wsUnsub?.(); wsUnsub = null; return auth.signOut(); },
 
     async loadWorkspace(uid) {
       const snap = await wsRef(uid).get();
@@ -161,6 +162,15 @@
       }, () => onChange([]));
     },
     stopMarket,
+    /* ----- שאלון ללקוחות (בלי התחברות): publicForms/{uid} ציבורי לקריאה, intakes/{id} פתוח רק ליצירה ----- */
+    async getPublicForm(uid) { try { const s = await db.collection('publicForms').doc(uid).get(); return s.exists ? s.data() : null; } catch { return null; } },
+    savePublicForm: (uid, f) => wrap(db.collection('publicForms').doc(uid).set({ enabled: !!f.enabled, bookingUrl: f.bookingUrl || '', title: f.title || '', updatedAt: Date.now() })),
+    submitIntake: (ownerUid, answers) => wrap(db.collection('intakes').add({ ownerUid, answers: JSON.stringify(answers), createdAt: Date.now(), v: 1 })),
+    watchIntakes(uid, cb) {
+      intakeUnsub?.();
+      intakeUnsub = db.collection('intakes').where('ownerUid', '==', uid).onSnapshot((s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});
+    },
+    deleteIntake: (id) => wrap(db.collection('intakes').doc(id).delete()),
     createRequest: (user, r) => wrap(db.collection('requests').add({
       ownerUid: user.uid, ownerName: user.name, title: r.title, area: r.area, budget: r.budget, desc: r.desc,
       clientLabel: r.clientLabel || user.name, accepted: null, createdAt: Date.now(),

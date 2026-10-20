@@ -94,3 +94,6 @@ mark{background:#f3dfb0;background:color-mix(in srgb,var(--pri) 30%,transparent)
 .kv{display:flex;gap:12px;padding:5px 0;border-bottom:1px dashed var(--line);align-items:baseline;flex-wrap:wrap}.kv>span:first-child{min-width:110px}
 .more{list-style:none;padding:0;margin:0}.more li{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line)}.more li button{flex:none}
 .details summary{cursor:pointer;list-style:none;display:flex;gap:8px;align-items:baseline}.details summary h2{margin:0}.details[open] summary{margin-bottom:8px}.details summary::-webkit-details-marker{display:none}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.linkbox{display:flex;gap:8px}.linkbox input{flex:1;min-width:0}
+a.btn{display:inline-block;text-decoration:none}a.btn.pri{background:var(--pri);border-color:var(--pri);color:var(--on-pri)}

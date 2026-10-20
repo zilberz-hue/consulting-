@@ -31,6 +31,27 @@ service cloud.firestore {
         && (!('label' in request.resource.data) || (request.resource.data.label is string && request.resource.data.label.size() <= 200));
     }
 
+    // שאלון ללקוחות: הגדרות הטופס של כל משתמש (פעיל? לאן להעביר אחרי השליחה) גלויות לכולם; רק הבעלים כותב
+    match /publicForms/{uid} {
+      allow read: if true;
+      allow write: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['enabled', 'bookingUrl', 'title', 'updatedAt'])
+        && request.resource.data.enabled is bool
+        && request.resource.data.bookingUrl is string && request.resource.data.bookingUrl.size() <= 500
+        && (request.resource.data.bookingUrl == '' || request.resource.data.bookingUrl.matches('https://.+'))
+        && request.resource.data.title is string && request.resource.data.title.size() <= 120;
+    }
+    // תשובות לקוחות: כל אחד (גם בלי התחברות) יכול רק ליצור, ורק לטופס פעיל. קריאה ומחיקה: הבעלים או מנהל. אין עדכון.
+    match /intakes/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['ownerUid', 'answers', 'createdAt', 'v'])
+        && request.resource.data.ownerUid is string && request.resource.data.ownerUid.size() <= 128
+        && request.resource.data.answers is string && request.resource.data.answers.size() <= 20000
+        && request.resource.data.createdAt is number && request.resource.data.v == 1
+        && get(/databases/$(db)/documents/publicForms/$(request.resource.data.ownerUid)).data.enabled == true;
+      allow read, delete: if signedIn() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+      allow update: if false;
+    }
+
     // שוק ייעוץ: כל משתמש מחובר רואה בקשות; הצעות מחיר גלויות רק לבעל הבקשה ולמגיש
     match /requests/{rid} {
       allow read: if signedIn();
