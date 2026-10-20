@@ -6,8 +6,15 @@ service cloud.firestore {
       return get(/databases/$(db)/documents/requests/$(rid)).data.ownerUid == request.auth.uid;
     }
 
-    // מנהלים: מסמך admins/{uid} שנוצר ידנית בקונסולת Firebase. הלקוח אינו יכול ליצור או לשנות אותו.
-    function isAdmin() { return signedIn() && exists(/databases/$(db)/documents/admins/$(request.auth.uid)); }
+    // מנהלים (קריאה בלבד בכל הנתונים). שתי דרכים, ואפשר לשלב:
+    //  1) להוסיף כאן את המייל, או את שם המשתמש בצורה שם@username.invalid, לרשימה adminEmails (באותיות קטנות), ולפרסם את הכללים.
+    //  2) ליצור ידנית בקונסולה מסמך admins/{uid}. הלקוח אינו יכול ליצור או לשנות אותו.
+    // חשוב: להוסיף מנהל רק אחרי שהוא כבר נרשם לאתר, כדי שאף אחד אחר לא יוכל להירשם עם אותו מייל.
+    function adminEmails() { return []; }
+    function isAdmin() {
+      return signedIn() && ((request.auth.token.email != null && request.auth.token.email.lower() in adminEmails())
+        || exists(/databases/$(db)/documents/admins/$(request.auth.uid)));
+    }
     match /admins/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;

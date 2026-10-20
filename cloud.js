@@ -85,7 +85,8 @@
     },
     /* מנהל: מסמך admins/{uid} שנוצר ידנית בקונסולה. הלקוח לא יכול ליצור אותו (ראה firestore.rules) */
     async isAdmin(uid) {
-      try { return (await db.collection('admins').doc(uid).get()).exists; } catch { return false; }
+      try { if ((await db.collection('admins').doc(uid).get()).exists) return true; } catch { /* ממשיכים לבדיקה השנייה */ }
+      try { await db.collection('workspaces').limit(1).get(); return true; } catch { return false; } // השאילתה על כל האוסף מותרת רק למנהל
     },
     /* מנהל: כל סביבות העבודה, לקריאה בלבד */
     async listWorkspaces() {
