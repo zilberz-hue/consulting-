@@ -26,11 +26,18 @@ let S;
 const readLocal = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } };
 S = Cloud.enabled ? empty() : Object.assign(empty(), readLocal() || {});
 const privateState = () => { const { requests, ...rest } = S; return rest; };
+let saveStatus = { st: '', err: '' }; // saving | saved | error
+const SV_TEXT = { saving: 'שומר…', saved: 'נשמר ✓', error: 'שגיאת שמירה' };
 const setSaveState = (st, err) => {
-  const el = $('#sv'); if (!el) return;
-  el.textContent = st === 'saving' ? 'שומר…' : st === 'saved' ? 'נשמר ✓' : 'שגיאת שמירה';
-  el.title = err || ''; el.style.color = st === 'error' ? 'var(--bad)' : '';
+  saveStatus = { st, err: err || '' };
+  const el = $('#sv'); if (el) { el.textContent = SV_TEXT[st] || ''; el.title = err || ''; el.style.color = st === 'error' ? 'var(--bad)' : ''; }
+  let b = $('#sb'); // באנר בולט כשהשמירה נכשלת, כדי שלא יאבדו שינויים בלי שהמשתמש יודע
+  if (st === 'error') {
+    if (!b) { b = document.createElement('div'); b.id = 'sb'; b.className = 'savebanner'; b.setAttribute('role', 'alert'); document.body.prepend(b); }
+    b.innerHTML = `<span>השינויים האחרונים עדיין לא נשמרו בענן. ${esc(err || '')} האתר ממשיך לנסות אוטומטית.</span> <button data-do="saveRetry">נסה עכשיו</button>`;
+  } else b?.remove();
 };
+addEventListener('beforeunload', (e) => { if (Cloud.enabled && (saveStatus.st === 'saving' || saveStatus.st === 'error')) { e.preventDefault(); e.returnValue = ''; } });
 const save = () => {
   if (Cloud.enabled) { if (me) Cloud.queueSave(me.uid, privateState(), setSaveState); return; }
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage blocked */ }
@@ -102,7 +109,7 @@ function render() {
   const V = isAdmin ? { ...VIEWS, admin: ['ניהול', adminView] } : VIEWS;
   const [, fn] = V[id] || V.dashboard;
   const help = '<button class="sm" data-do="tourStart">הדרכה</button>';
-  const who = `<span class="who">${Cloud.enabled ? `${esc(me.label)} · <small id="sv"></small> ` : ''}${help}${Cloud.enabled ? ' <button class="sm" data-do="logout">יציאה</button>' : ''}</span>`;
+  const who = `<span class="who">${Cloud.enabled ? `${esc(me.label)} · <small id="sv" ${saveStatus.st === 'error' ? 'style="color:var(--bad)"' : ''}>${SV_TEXT[saveStatus.st] || ''}</small> ` : ''}${help}${Cloud.enabled ? ' <button class="sm" data-do="logout">יציאה</button>' : ''}</span>`;
   $('#nav').innerHTML = Object.entries(V).map(([k, [t]]) => `<a href="#${k}" class="${k === id ? 'on' : ''}">${t}</a>`).join('') + who;
   $('#view').innerHTML = fn();
   tourRender();
@@ -469,6 +476,7 @@ const ACTIONS = {
       save(); render();
     });
   },
+  saveRetry: () => Cloud.retryNow(),
   logout: async () => { await Cloud.signOut(); },
   adminRefresh: () => { adminData = null; render(); },
   adminOpen: (id) => { adminUser = id; render(); scrollTo(0, 0); },

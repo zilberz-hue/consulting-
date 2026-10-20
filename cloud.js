@@ -50,12 +50,18 @@
   let wsUnsub = null; let timer = null; let pending = null;
   const wsRef = (uid) => db.collection('workspaces').doc(uid);
 
+  let latest = null; let retryTimer = null;
   async function write(uid, data, cb) {
-    cb?.('saving');
-    try {
-      await wsRef(uid).set({ json: JSON.stringify(data), writer: SESSION, updatedAt: Date.now(), label: myLabel });
-      cb?.('saved');
-    } catch (e) { cb?.('error', msg(e)); }
+    cb?.('saving'); clearTimeout(retryTimer);
+    const doc = { json: JSON.stringify(data), writer: SESSION, updatedAt: Date.now() };
+    let err = null;
+    try { await wsRef(uid).set({ ...doc, label: myLabel }); cb?.('saved'); return; } catch (e) { err = e; }
+    if (err.code === 'permission-denied') { // כללי Firestore ישנים לא מכירים את השדה label: שומרים בלעדיו
+      try { await wsRef(uid).set(doc); cb?.('saved'); return; } catch (e2) { err = e2; }
+    }
+    const hint = err.code === 'permission-denied' ? ' (השרת דחה את הכתיבה: כנראה כללי האבטחה ב-Firebase לא פורסמו או לא מעודכנים)' : '';
+    cb?.('error', msg(err) + hint);
+    retryTimer = setTimeout(() => { if (latest && !pending) write(latest.uid, latest.data, latest.cb); }, 8000); // ממשיכים לנסות עד שמצליח
   }
 
   /* ----- שוק ----- */
@@ -98,10 +104,11 @@
     },
     /* שמירה מושהית; קריאות רצופות מתאחדות לכתיבה אחת */
     queueSave(uid, data, cb) {
-      pending = { uid, data, cb }; cb?.('saving');
+      pending = { uid, data, cb }; latest = pending; cb?.('saving');
       clearTimeout(timer);
       timer = setTimeout(() => { const p = pending; pending = null; if (p) write(p.uid, p.data, p.cb); }, 600);
     },
+    retryNow() { if (latest) { clearTimeout(timer); pending = null; return write(latest.uid, latest.data, latest.cb); } },
     async flush() {
       clearTimeout(timer);
       const p = pending; pending = null;

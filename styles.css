@@ -76,3 +76,5 @@ tr.dragging{background:var(--bg)}
 
 tbody[data-open] tr.trow,tr[data-sub][data-open]{cursor:grab}
 .dragging-now,.dragging-now *{user-select:none!important;-webkit-user-select:none!important;cursor:grabbing!important}
+.savebanner{position:sticky;top:0;z-index:100;background:#b91c1c;color:#fff;padding:8px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:14px}
+.savebanner button{background:#fff;color:#7f1d1d;border-color:#fff}
