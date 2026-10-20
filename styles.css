@@ -78,3 +78,12 @@ tbody[data-open] tr.trow,tr[data-sub][data-open]{cursor:grab}
 .dragging-now,.dragging-now *{user-select:none!important;-webkit-user-select:none!important;cursor:grabbing!important}
 .savebanner{position:sticky;top:0;z-index:100;background:#b91c1c;color:#fff;padding:8px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:14px}
 .savebanner button{background:#fff;color:#7f1d1d;border-color:#fff}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}
+.chip{display:inline-flex;align-items:center;gap:6px;margin:0;padding:7px 12px;border:1px solid var(--line);border-radius:99px;background:var(--bg);color:var(--ink);font-size:15px;cursor:pointer}
+.chip input{width:auto;margin:0}
+.chip:has(input:checked){border-color:var(--pri);background:color-mix(in srgb,var(--pri) 14%,var(--card));color:var(--ink)}
+.chip:focus-within{outline:2px solid var(--pri)}
+.rate{display:flex;align-items:center;gap:10px}.rate input{width:150px;padding:0}.rate output{width:1.2em;text-align:center;font-weight:600}
+.wiz{max-width:640px}.wiz .q{flex-wrap:wrap}
+input,select,textarea,progress{accent-color:var(--pri)}

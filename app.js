@@ -18,7 +18,7 @@ const num = (v) => (isFinite(parseFloat(v)) ? parseFloat(v) : 0);
 
 const empty = () => ({
   clients: [], projects: [], tasks: [], time: [], invoices: [],
-  diagnostics: [], requests: [],
+  diagnostics: [], profiles: [], requests: [],
   plan: { cash: 50000, revenue: 30000, growth: 3, cogs: 35, fixed: 18000, months: 12 },
   settings: { rate: 400 },
 });
@@ -102,6 +102,7 @@ const VIEWS = {
   tasks: ['משימות', tasks],
   finance: ['שעות וחשבוניות', finance],
   diagnostic: ['אבחון עסקי', diagnostic],
+  profile: ['אפיון אישי', profileView],
   plan: ['תוכנית ותחזית', plan],
   market: ['שוק ייעוץ', market],
 };
@@ -507,6 +508,30 @@ const ACTIONS = {
       save(); render();
     });
   },
+  profNew: () => { wiz = { step: 0, data: { hours: '10' }, editId: null }; profOpen = null; render(); scrollTo(0, 0); },
+  profOpen: (id) => { profOpen = id; render(); scrollTo(0, 0); },
+  profBack: () => { profOpen = null; render(); },
+  profEdit: (id) => { wiz = { step: 0, data: JSON.parse(JSON.stringify(by(S.profiles, id).answers)), editId: id }; profOpen = null; render(); scrollTo(0, 0); },
+  profDel: (id) => ask('למחוק את האפיון והתוכנית? משימות שכבר נוצרו מהתוכנית יישארו.', () => { S.profiles = S.profiles.filter((x) => x.id !== id); if (profOpen === id) profOpen = null; save(); render(); }),
+  profTasks: (id) => { // משימה לכל שלב, עם תתי-משימות ותאריכי יעד
+    const p = by(S.profiles, id); if (!p) return;
+    [1, 2, 3, 4].forEach((ph) => {
+      const items = p.plan.filter((x) => x.phase === ph); if (!items.length) return;
+      const due = pDate(p.createdAt, P_PHASES[ph].days);
+      S.tasks.push({ id: uid(), title: `${p.name} · ${P_PHASES[ph].label}`, project: '', due, done: false, created: Date.now(), subs: items.map((x) => ({ id: uid(), title: x.title, due, done: false })) });
+    });
+    p.tasksAdded = true; save(); location.hash = '#tasks'; render();
+  },
+  wizCancel: () => ask('לבטל את האפיון? מה שמילאת לא יישמר.', () => { wiz = null; render(); }),
+  wizBack: () => { wiz.step = Math.max(0, wiz.step - 1); render(); scrollTo(0, 0); },
+  wizNext: () => {
+    const e = wizCheck(); if (e) { $('#wizErr').textContent = e; return; }
+    if (wiz.step < WIZ_STEPS.length - 1) { wiz.step++; render(); scrollTo(0, 0); return; }
+    const d = wiz.data; const base = Date.now(); const b = buildProfile(d, base);
+    const rec = { id: wiz.editId || uid(), name: d.name.trim(), role: d.role, answers: d, archetype: b.archetype, ranked: b.ranked, low: b.low, top: b.top, plan: b.plan, notes: b.notes, createdAt: base, tasksAdded: false };
+    const i = S.profiles.findIndex((x) => x.id === rec.id); if (i >= 0) S.profiles[i] = rec; else S.profiles.push(rec);
+    profOpen = rec.id; wiz = null; save(); render(); scrollTo(0, 0);
+  },
   saveRetry: () => Cloud.retryNow(),
   logout: async () => { await Cloud.signOut(); },
   adminRefresh: () => { adminData = null; render(); },
@@ -530,6 +555,186 @@ const ACTIONS = {
   }),
   reset: () => ask('למחוק את כל הנתונים?', () => { S = empty(); save(); render(); }),
 };
+/* ---------- אפיון אישי: שאלון לפי תפקיד ← תוכנית אישית ל-90 יום ← משימות ---------- */
+const P_ROLES = { founder: 'מייסד/ת', partner: 'שותף/ה', therapist: 'מטפל/ת' };
+const P_SKILLS = { expertise: 'מומחיות מקצועית', marketing: 'שיווק ונראות', sales: 'מכירות ושימור לקוחות', ops: 'ארגון ותפעול', finance: 'כספים ותמחור', people: 'עבודה עם אנשים וניהול', tech: 'כלים דיגיטליים' };
+const P_ARCH = { expertise: 'המומחה/ית', marketing: 'איש/ת הנראות', sales: 'בונה/ת הקשרים', ops: 'המסדר/ת', finance: 'איש/ת המספרים', people: 'המחבר/ת', tech: 'הטכנולוג/ית' };
+const P_GOALS = { clients: 'להגדיל את מספר הלקוחות / המטופלים', income: 'להגדיל הכנסה', brand: 'לבנות מותג ונראות', structure: 'לבנות מבנה עבודה מסודר', team: 'להקים צוות או שותפויות', product: 'לפתח שירות או מוצר חדש', balance: 'לשפר איזון בין עבודה לחיים', skills: 'להעמיק מקצועית' };
+const P_PHASES = [null, { label: 'שבועיים ראשונים: יסודות', days: 14 }, { label: 'עד יום 30: הקמה', days: 30 }, { label: 'עד יום 60: צמיחה', days: 60 }, { label: 'עד יום 90: סקירה והמשך', days: 90 }];
+const P_ROLE_Q = {
+  founder: [
+    { k: 'stage', label: 'באיזה שלב העסק?', opts: ['רעיון', 'בהקמה', 'פועל עד שנה', 'פועל מעל שנה'] },
+    { k: 'teamSize', label: 'כמה אנשים בצוות כרגע (כולל אותך)?', type: 'number', def: 1 },
+    { k: 'funding', label: 'ממה ממומן העסק?', opts: ['הון עצמי', 'שותפים', 'משקיע', 'הלוואה / מימון חיצוני'] },
+    { k: 'bottleneck', label: 'מה הצוואר בקבוק העיקרי היום?', opts: ['חוסר בלקוחות', 'כסף', 'זמן', 'צוות', 'ידע מקצועי', 'בהירות לגבי הכיוון'] },
+  ],
+  partner: [
+    { k: 'contribution', label: 'מה התרומה העיקרית שלך לשותפות?', opts: ['הון', 'לקוחות ולידים', 'מומחיות מקצועית', 'תפעול וניהול', 'שילוב של כמה'] },
+    { k: 'commitment', label: 'רמת המחויבות שלך', opts: ['מלאה', 'חלקית', 'ייעוצית'] },
+    { k: 'horizon', label: 'אופק זמן צפוי בשותפות', opts: ['עד שנה', 'שנה עד שלוש', 'מעל שלוש שנים'] },
+    { k: 'clarity', label: 'איך מוגדרים התפקידים והתנאים היום?', opts: ['מוגדרים בכתב', 'סוכמו בעל פה', 'עוד לא הוגדרו'] },
+  ],
+  therapist: [
+    { k: 'modality', label: 'תחום / שיטת טיפול', type: 'text' },
+    { k: 'setting', label: 'איפה מטפלים?', opts: ['קליניקה פיזית', 'אונליין', 'שילוב'] },
+    { k: 'load', label: 'כמה מטופלים בשבוע כיום?', type: 'number', def: 0 },
+    { k: 'target', label: 'כמה מטופלים בשבוע ביעד?', type: 'number', def: 10 },
+    { k: 'referrals', label: 'מאיפה מגיעים מטופלים בעיקר?', opts: ['הפניות מקצועיות', 'אינטרנט וקהילות', 'קופות / גופים', 'שיווק אישי', 'עוד אין'] },
+    { k: 'supervision', label: 'הדרכה / ייעוץ עמיתים', opts: ['קבועה', 'מדי פעם', 'אין'] },
+  ],
+};
+/* תבניות הפעולות. p = עדיפות (0 תמיד נכלל, 1 חיוני, 2 חשוב, 3 תוספת), ph = שלב (1 עד 4) */
+const P_BASE = {
+  founder: [
+    { p: 1, ph: 1, area: 'אסטרטגיה', t: 'לנסח בכתב חזון ושלוש מטרות מדידות ל-90 הימים הקרובים', why: 'בלי יעד כתוב קשה לדעת מה לא לעשות.' },
+    { p: 1, ph: 1, area: 'שיווק', t: 'להגדיר את הלקוח האידיאלי ואת הבעיה המרכזית שהעסק פותר לו', why: 'כל החלטה שיווקית ומכירתית נשענת על זה.' },
+    { p: 1, ph: 2, area: 'מכירות', t: 'לבדוק את ההצעה מול 5 לקוחות פוטנציאליים ולתעד את המשוב', why: 'בדיקה מוקדמת חוסכת חודשים של בנייה בכיוון שגוי.' },
+    { p: 1, ph: 2, area: 'כספים', t: 'לבנות תחזית תזרים ל-12 חודשים (לשונית "תוכנית ותחזית")', why: 'להבין כמה זמן המזומן מחזיק ומה נקודת האיזון.' },
+    { p: 2, ph: 3, area: 'כספים', t: 'לקבוע תמחור לפי עלות ורווחיות ולבדוק אותו מול השוק', why: 'תמחור נמוך מדי הוא הסיבה הנפוצה לשחיקה.' },
+    { p: 2, ph: 3, area: 'תפעול', t: 'לתעד את שלושת התהליכים המרכזיים בעסק', why: 'תהליך כתוב מאפשר להאציל ולצמוח.' },
+    { p: 2, ph: 4, area: 'אסטרטגיה', t: 'להחליט מה ממשיכים, מה משנים ומה מפסיקים, לפי המטרות שנקבעו', why: 'סקירה כנה אחרי 90 יום היא הבסיס לרבעון הבא.' },
+  ],
+  partner: [
+    { p: 1, ph: 1, area: 'שותפות', t: 'לסכם בכתב תפקידים, אחריות וסמכויות החלטה של כל שותף', why: 'רוב המחלוקות בין שותפים נובעות מציפיות לא מוגדרות.' },
+    { p: 1, ph: 1, area: 'שותפות', t: 'להגדיר מה כל שותף תורם (הון, זמן, לקוחות, מומחיות) ומה הוא מצפה לקבל', why: 'ליישר ציפיות לפני שהן הופכות לכעס.' },
+    { p: 1, ph: 2, area: 'שותפות', t: 'לקבוע פגישת שותפים חודשית קבועה עם סדר יום וסיכום כתוב', why: 'קצב קבוע מונע הפתעות.' },
+    { p: 2, ph: 2, area: 'ניהול', t: 'להגדיר לכל שותף שלושה מדדי הצלחה אישיים ל-90 הימים', why: 'מדד ברור מאפשר שיחה עניינית ולא אישית.' },
+    { p: 2, ph: 3, area: 'כספים', t: 'להסדיר בכתב חלוקת רווחים, משיכות והחזר הוצאות', why: 'כסף שאינו מוגדר הוא מקור עיקרי למתח.' },
+    { p: 2, ph: 3, area: 'שותפות', t: 'לבדוק עם איש מקצוע סעיפי יציאה, מחויבות לאורך זמן והסכם שותפים', why: 'הסדרת יציאה מראש מגינה על כולם.' },
+    { p: 2, ph: 4, area: 'שותפות', t: 'סקירת 90 יום: האם התרומה בפועל תואמת את מה שסוכם', why: 'מתאימים את ההסכם למציאות לפני שהפער גדל.' },
+  ],
+  therapist: [
+    { p: 1, ph: 1, area: 'הקמה', t: 'להכין טופס קליטה, הסכמת מטופל ומדיניות ביטולים ותשלום', why: 'מסגרת ברורה מגינה על המטופל ועליך.' },
+    { p: 1, ph: 1, area: 'הקמה', t: 'להגדיר איך שומרים תיעוד, סודיות ואבטחת מידע (גם בדיגיטל)', why: 'חובה מקצועית שעדיף להסדיר מההתחלה.' },
+    { p: 1, ph: 2, area: 'תפעול', t: 'לבנות לוח שבועי עם שעות קבלה קבועות ויעד מטופלים', why: 'לוח קבוע יוצר יציבות הכנסה וזמן מנוחה.' },
+    { p: 2, ph: 2, area: 'תפעול', t: 'להקים כרטיס לכל מטופל בלשונית "לקוחות" ולהפעיל רישום שעות', why: 'מעקב מסודר מאפשר חיוב נכון ותמונה אמיתית של העבודה.' },
+    { p: 1, ph: 3, area: 'שיווק', t: 'להגדיר שלושה ערוצי הפניה ולהתחיל בכל אחד פעולה שבועית', why: 'מטופלים מגיעים מערוצים קבועים, לא ממזל.' },
+    { p: 2, ph: 3, area: 'שיווק', t: 'להכין פרופיל מקצועי ברור: תחום, שיטה ולמי זה מתאים', why: 'מי שמבין במהירות מה אתה עושה יפנה אליך.' },
+    { p: 2, ph: 4, area: 'כספים', t: 'לסקור עומס מטופלים מול היעד ולהתאים תמחור', why: 'מחיר ועומס נקבעים יחד.' },
+  ],
+};
+const P_GAP = {
+  expertise: [{ ph: 2, t: 'לקבוע תוכנית התפתחות מקצועית: הכשרה או מפגש הדרכה אחד בחודש' }, { ph: 3, t: 'לתעד שיטת עבודה או מקרה מייצג שאפשר לשתף' }],
+  marketing: [{ ph: 2, t: 'לבחור ערוץ תוכן אחד ולפרסם בו פעם בשבוע' }, { ph: 3, t: 'לנסח מסר אחד ברור ולהקים עמוד או פרופיל שמציג אותו' }],
+  sales: [{ ph: 2, t: 'לבנות שגרת מעקב: מי פנה, מה נשלח ומתי חוזרים אליו' }, { ph: 3, t: 'לנסח הצעת ערך ולתרגל שיחת היכרות' }],
+  ops: [{ ph: 2, t: 'לתעד את התהליך החוזר ביותר ולפשט אותו' }, { ph: 3, t: 'להפעיל סדר עדיפויות שבועי בלשונית "משימות"' }],
+  finance: [{ ph: 2, t: 'להקים מעקב חודשי של הכנסות והוצאות' }, { ph: 3, t: 'לבדוק מהי עלות שעת העבודה שלך ולהשוות לתמחור' }],
+  people: [{ ph: 2, t: 'לקבוע שיחות אחד על אחד קבועות עם שותפים או צוות' }, { ph: 3, t: 'להגדיר האצלת סמכויות ברורה: מה מחליטים לבד ומה מתייעצים' }],
+  tech: [{ ph: 2, t: 'להפעיל כלי לתיאום פגישות וניהול לקוחות (אפשר באפליקציה הזו)' }, { ph: 3, t: 'להפוך משימה חוזרת אחת לאוטומטית' }],
+};
+const P_GOAL_ACT = {
+  clients: { ph: 2, t: 'לקבוע יעד חודשי ללקוחות / מטופלים חדשים ולמדוד אותו' }, income: { ph: 2, t: 'לקבוע יעד הכנסה חודשי ולפרק אותו לשעות ולמחיר' },
+  brand: { ph: 3, t: 'לבנות זהות מותג: שם, מסר וחזות אחידה' }, structure: { ph: 2, t: 'לבנות שבוע קבוע עם בלוקים לעבודה, ניהול והתפתחות' },
+  team: { ph: 3, t: 'למפות אילו תפקידים חסרים ומי יכול למלא אותם' }, product: { ph: 3, t: 'לתכנן שירות או חבילה חדשה ולבדוק עניין אצל 5 לקוחות' },
+  balance: { ph: 2, t: 'לקבוע שעות עבודה קבועות ויום מנוחה קבוע' }, skills: { ph: 3, t: 'לבנות מסלול למידה אישי לרבעון' },
+};
+const pDate = (base, days) => new Date(base + days * 864e5).toISOString().slice(0, 10);
+function buildProfile(a, base = Date.now()) {
+  const sk = Object.keys(P_SKILLS).map((k) => ({ k, v: num(a['skill_' + k]) || 3 }));
+  const order = Object.keys(P_SKILLS);
+  const ranked = [...sk].sort((x, y) => y.v - x.v || order.indexOf(x.k) - order.indexOf(y.k));
+  const top = ranked[0]; const low = [...sk].sort((x, y) => x.v - y.v || order.indexOf(x.k) - order.indexOf(y.k)).slice(0, 2);
+  const acts = P_BASE[a.role].map((x) => ({ ...x, src: 'role' }));
+  const add = (o) => acts.push(o);
+  // התאמות לפי תשובות התפקיד
+  if (a.role === 'founder') {
+    if (['רעיון', 'בהקמה'].includes(a.stage)) add({ p: 1, ph: 1, area: 'הקמה', t: 'לבדוק היבטים משפטיים בסיסיים: סוג עוסק, ביטוח, הסכם סטנדרטי ללקוח', why: 'להתחיל נכון עולה פחות מלתקן אחר כך.' });
+    else add({ p: 1, ph: 2, area: 'מכירות', t: 'למדוד המרה ושימור לקוחות ולזהות איפה הלקוחות נושרים', why: 'בעסק פועל, הצמיחה יושבת על הדליפה הגדולה ביותר.' });
+    const bn = { 'חוסר בלקוחות': ['שיווק', 'להגדיר ערוץ גיוס לקוחות עיקרי ולהקצות לו שעתיים קבועות בשבוע'], 'כסף': ['כספים', 'לזהות את שלוש ההוצאות הגדולות ולבדוק מה אפשר לצמצם או לדחות'], 'זמן': ['תפעול', 'לזהות שלוש משימות שאפשר להאציל, להפסיק או לאוטמט'], 'צוות': ['ניהול', 'להגדיר תיאור תפקיד לאדם הבא שמצטרף ולמי הוא כפוף'], 'ידע מקצועי': ['התפתחות', 'לבחור מנטור או קורס שסוגר את פער הידע המרכזי'], 'בהירות לגבי הכיוון': ['אסטרטגיה', 'לקיים סדנת כיוון של חצי יום ולסכם החלטה כתובה'] }[a.bottleneck];
+    if (bn) add({ p: 1, ph: 2, area: bn[0], t: bn[1], why: `זה הצוואר בקבוק שציינת: "${a.bottleneck}".` });
+  }
+  if (a.role === 'partner') {
+    if (a.clarity !== 'מוגדרים בכתב') add({ p: 0, ph: 1, area: 'שותפות', t: 'לנסח את ההסכמות הקיימות במסמך אחד ולחתום עליו ביחד', why: `סימנת שהתפקידים והתנאים "${a.clarity}". זה הצעד הדחוף ביותר.` });
+    const c = { 'לקוחות ולידים': 'לקבוע יעד שבועי של פניות ופגישות חדשות שאתה מביא', 'מומחיות מקצועית': 'להגדיר את אחריותך המקצועית ואת סטנדרט האיכות של השירות', 'תפעול וניהול': 'להגדיר אילו החלטות תפעוליות מתקבלות על ידיך ואילו בהסכמה', 'הון': 'לתעד את לוח הזמנים ותנאי ההשקעה ואת מה ההשקעה מממנת' }[a.contribution];
+    if (c) add({ p: 1, ph: 2, area: 'שותפות', t: c, why: `התרומה העיקרית שלך: ${a.contribution}.` });
+    if (a.commitment !== 'מלאה') add({ p: 2, ph: 2, area: 'שותפות', t: 'להגדיר בכתב כמה שעות בשבוע והיקף זמינות מצופה ממך', why: `מחויבות ${a.commitment} דורשת הגדרה כדי שלא תיחשב חוסר מעורבות.` });
+  }
+  if (a.role === 'therapist') {
+    if (a.supervision === 'אין') add({ p: 1, ph: 1, area: 'התפתחות', t: 'למצוא מדריך או קבוצת עמיתים ולקבוע פגישה קבועה', why: 'הדרכה היא חלק מהמקצועיות וגם מונעת שחיקה.' });
+    if (a.setting !== 'קליניקה פיזית') add({ p: 1, ph: 1, area: 'הקמה', t: 'להגדיר כלי וידאו מאובטח ונוהל לתקלות בזמן פגישה', why: 'טיפול מרחוק דורש פרטיות ואמינות טכנית.' });
+    if (a.referrals === 'עוד אין') add({ p: 1, ph: 2, area: 'שיווק', t: 'להציג את עצמך ל-5 גורמים מפנים (רופאים, קליניקות, קהילות) בפגישה או בשיחה', why: 'בלי ערוץ הפניה המטופלים לא יגיעו מעצמם.' });
+    if (num(a.target) > Math.max(num(a.load) * 1.5, num(a.load) + 2)) add({ p: 1, ph: 2, area: 'שיווק', t: `לקבוע יעד שבועי של פניות חדשות כדי להגיע מ-${num(a.load)} ל-${num(a.target)} מטופלים בשבוע`, why: 'הפער בין העומס הנוכחי ליעד מחייב מקור פניות קבוע.' });
+  }
+  // פערים (שתי המיומנויות החלשות) וחוזקה אחת למינוף
+  low.forEach((s, i) => P_GAP[s.k].forEach((g) => add({ p: i === 0 ? 1 : 2, ph: g.ph, area: P_SKILLS[s.k], t: g.t, why: `סימנת "${P_SKILLS[s.k]}" ב-${s.v} מתוך 5.`, src: 'gap' })));
+  if (top.v >= 4) add({ p: 3, ph: 3, area: P_SKILLS[top.k], t: `למנף את החוזקה "${P_SKILLS[top.k]}": להגדיר איך היא הופכת ליתרון בהצעה שלך`, why: `זו החוזקה הבולטת שלך (${top.v} מתוך 5).` });
+  (a.goals || []).forEach((g) => P_GOAL_ACT[g] && add({ p: 1, ph: P_GOAL_ACT[g].ph, area: 'מטרה', t: P_GOAL_ACT[g].t, why: `בחרת את המטרה: ${P_GOALS[g]}.` }));
+  add({ p: 0, ph: 4, area: 'סקירה', t: 'פגישת סיכום 90 יום: מה הושג, מה למדנו ומה היעדים לרבעון הבא', why: 'סוגרים מעגל ומתחילים את הרבעון הבא ממקום מדויק.' });
+  // התאמה לזמן הפנוי: פחות שעות, פחות פעולות, ורק החשובות
+  const hrs = num(a.hours); const cap = hrs < 5 ? 6 : hrs < 15 ? 9 : 13;
+  const seen = new Set(); const uniq = acts.filter((x) => (seen.has(x.t) ? false : seen.add(x.t)));
+  const chosen = uniq.map((x, i) => ({ ...x, i })).sort((x, y) => x.p - y.p || x.ph - y.ph || x.i - y.i).slice(0, cap).sort((x, y) => x.ph - y.ph || x.p - y.p || x.i - y.i);
+  const plan = chosen.map((x) => ({ id: uid(), title: x.t, area: x.area, phase: x.ph, why: x.why }));
+  const notes = [];
+  notes.push({ 'נינוח': 'קצב נינוח: מומלץ לא יותר משתי פעולות פעילות במקביל.', 'מאוזן': 'קצב מאוזן: שלוש פעולות פעילות במקביל בערך.', 'מהיר': 'קצב מהיר: חשוב להקדיש זמן קבוע לסקירה כדי לא לפספס פרטים.' }[a.pace]);
+  notes.push({ 'מנתח/ת': 'מקבל/ת החלטות לפי נתונים: מדוד את מה שמופיע בתוכנית, כך תרגיש/י ביטחון.', 'אינטואיטיבי/ת': 'מקבל/ת החלטות מהבטן: קבע/י רגע קצר של בדיקה מול נתון אחד לפני החלטות גדולות.', 'שיתופי/ת': 'מקבל/ת החלטות בשיתוף: תכנן/י מראש מי מתייעצים איתו בכל החלטה.' }[a.decision]);
+  notes.push({ 'כתוב': 'תקשורת כתובה: עדכון קצר בכתב פעם בשבוע וסיכומי החלטות.', 'שיחה': 'תקשורת בשיחה: שיחת סנכרון קצרה קבועה, וסיכום בשורה אחת אחריה.', 'פגישות': 'תקשורת בפגישות: פגישה קבועה בלוח, עם סדר יום וסיכום.' }[a.comm]);
+  if (hrs && hrs < 5) notes.push(`עם ${hrs} שעות בשבוע קיצרנו את התוכנית ל-${plan.length} הפעולות החשובות ביותר.`);
+  return { role: a.role, archetype: P_ARCH[top.k], ranked, low: low.map((s) => s.k), top: top.k, plan, notes: notes.filter(Boolean), createdAt: base };
+}
+
+let wiz = null; // { step, data, editId } אשף האפיון (בזיכרון בלבד עד השמירה)
+let profOpen = null; // מזהה אפיון פתוח לצפייה
+const WIZ_STEPS = ['מי אתה', 'מטרות', 'חוזקות', 'סגנון עבודה', 'שאלות לתפקיד'];
+function profileView() {
+  if (wiz) return wizView();
+  if (profOpen && by(S.profiles, profOpen)) return profileDetail(by(S.profiles, profOpen));
+  const list = S.profiles;
+  return `<h1>אפיון אישי</h1><p class="muted">שאלון קצר לכל שותף, מייסד או מטפל. בסופו מתקבלת תוכנית אישית ל-90 יום, שאפשר להפוך בלחיצה למשימות עם תאריכים.</p>
+  <div class="bar"><span class="muted">${list.length ? list.length + ' אפיונים' : ''}</span><button class="pri" data-do="profNew">+ אפיון חדש</button></div>
+  ${list.length ? list.map((p) => `<div class="card"><div class="bar" style="margin:0"><div><h2 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span> ${p.tasksAdded ? '<span class="tag ok">התוכנית במשימות</span>' : ''}</h2>
+    <span class="muted">${esc(p.archetype)} · ${p.plan.length} פעולות · ${esc(new Date(p.createdAt).toLocaleDateString('he-IL'))}</span></div>
+    <span><button class="sm pri" data-do="profOpen" data-id="${p.id}">פתח תוכנית</button> <button class="sm" data-do="profEdit" data-id="${p.id}">עריכת אפיון</button> <button class="sm del" data-do="profDel" data-id="${p.id}">מחיקה</button></span></div></div>`).join('')
+    : '<div class="card empty"><p>עוד לא מולא אפיון.</p><button class="pri" data-do="profNew">התחל אפיון ראשון</button></div>'}`;
+}
+const wv = (k, d = '') => esc(wiz.data[k] ?? d);
+function wizView() {
+  const d = wiz.data; const s = wiz.step; const last = s === WIZ_STEPS.length - 1;
+  const sel = (k, opts, ph = '— בחר —') => `<select data-w="${k}"><option value="">${ph}</option>${opts.map((o) => `<option ${d[k] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+  let body = '';
+  if (s === 0) body = `<label for="w_name">שם</label><input id="w_name" data-w="name" value="${wv('name')}" autocomplete="off">
+    <label>תפקיד</label><div class="chips">${Object.entries(P_ROLES).map(([k, v]) => `<label class="chip"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}> ${v}</label>`).join('')}</div>
+    <label>ניסיון בתחום</label>${sel('exp', ['עד שנה', '1 עד 3 שנים', '3 עד 7 שנים', 'מעל 7 שנים'])}
+    <label for="w_hours">כמה שעות בשבוע אפשר להקדיש לבנייה ולצמיחה?</label><input id="w_hours" data-w="hours" type="number" min="0" max="80" value="${wv('hours', '10')}">`;
+  if (s === 1) body = `<p class="muted">בחר עד שלוש מטרות מרכזיות.</p><div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div>
+    <p id="wizHint" class="err" role="alert"></p><label for="w_success">איך נראית הצלחה בעוד 90 יום?</label><textarea id="w_success" data-w="success">${wv('success')}</textarea>`;
+  if (s === 2) body = `<p class="muted">דרג/י את עצמך מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`;
+  if (s === 3) body = `<label>קצב עבודה מועדף</label>${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}<label>איך מקבלים החלטות?</label>${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}
+    <label>תקשורת מועדפת</label>${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}<label for="w_obst">מה הדבר שהכי מעכב אותך היום?</label><textarea id="w_obst" data-w="obstacle">${wv('obstacle')}</textarea>`;
+  if (s === 4) P_ROLE_Q[d.role].forEach((q) => { if (q.type === 'number' && d[q.k] === undefined) d[q.k] = String(q.def ?? 0); });
+  if (s === 4) body = P_ROLE_Q[d.role].map((q) => `<label ${q.opts ? '' : `for="w_${q.k}"`}>${q.label}</label>${q.opts ? sel(q.k, q.opts) : `<input id="w_${q.k}" data-w="${q.k}" type="${q.type || 'text'}" ${q.type === 'number' ? 'min="0"' : ''} value="${wv(q.k, q.def ?? '')}">`}`).join('');
+  return `<h1>${wiz.editId ? 'עריכת אפיון' : 'אפיון אישי'}</h1><div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
+  ${body}<p id="wizErr" class="err" role="alert"></p><div class="row"><button class="pri" data-do="wizNext">${last ? 'צור תוכנית' : 'הבא'}</button>${s > 0 ? '<button data-do="wizBack">הקודם</button>' : ''}<button class="tour-x" data-do="wizCancel">ביטול</button></div></div>`;
+}
+function wizCheck() {
+  const d = wiz.data; const s = wiz.step;
+  if (s === 0 && !(d.name || '').trim()) return 'יש להזין שם';
+  if (s === 0 && !d.role) return 'יש לבחור תפקיד';
+  if (s === 1 && !(d.goals || []).length) return 'יש לבחור לפחות מטרה אחת';
+  return '';
+}
+document.addEventListener('input', (ev) => {
+  const t = ev.target; if (!wiz || !t.dataset) return;
+  if (t.dataset.wg) { // קבוצת תיבות סימון (עד 3)
+    const cur = new Set(wiz.data[t.dataset.wg] || []);
+    if (t.checked) { if (cur.size >= 3) { t.checked = false; const h = $('#wizHint'); if (h) h.textContent = 'אפשר לבחור עד שלוש מטרות'; return; } cur.add(t.value); } else cur.delete(t.value);
+    wiz.data[t.dataset.wg] = [...cur]; const h = $('#wizHint'); if (h) h.textContent = '';
+  } else if (t.dataset.w) { wiz.data[t.dataset.w] = t.value; if (t.type === 'range') t.nextElementSibling.textContent = t.value; }
+});
+function profileDetail(p) {
+  const sk = [...p.ranked].sort((x, y) => y.v - x.v); const day = (n) => pDate(p.createdAt, n);
+  const byPhase = [1, 2, 3, 4].map((ph) => ({ ph, items: p.plan.filter((x) => x.phase === ph) })).filter((g) => g.items.length);
+  return `<div class="bar"><h1 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span></h1><span><button data-do="profBack">← כל האפיונים</button> <button data-do="profEdit" data-id="${p.id}">עריכת אפיון</button></span></div>
+  <div class="card"><h2>${esc(p.archetype)}</h2><p>החוזקה הבולטת: <b>${esc(P_SKILLS[p.top])}</b>. תחומים לחיזוק: <b>${p.low.map((k) => esc(P_SKILLS[k])).join(', ')}</b>.</p>
+  ${sk.map((s) => `<div style="margin:8px 0"><div class="bar" style="margin:0"><span>${esc(P_SKILLS[s.k])}</span><b>${s.v}/5</b></div><div class="meter"><i style="width:${s.v * 20}%;background:${s.v <= 2 ? 'var(--warn)' : 'var(--ok)'}"></i></div></div>`).join('')}
+  ${(p.answers.goals || []).length ? `<p style="margin-top:12px">מטרות: ${(p.answers.goals || []).map((g) => `<span class="tag">${esc(P_GOALS[g])}</span>`).join(' ')}</p>` : ''}
+  ${p.answers.success ? `<p>הצלחה בעוד 90 יום, במילים שלך: <i>${esc(p.answers.success)}</i></p>` : ''}</div>
+  <div class="card"><div class="bar"><h2 style="margin:0">תוכנית אישית ל-90 יום</h2>${p.tasksAdded ? '<span class="tag ok">נוספה למשימות</span>' : '<button class="pri" data-do="profTasks" data-id="' + p.id + '">הוסף את התוכנית למשימות</button>'}</div>
+  ${byPhase.map((g) => `<h3 style="margin:14px 0 6px">${esc(P_PHASES[g.ph].label)} <span class="muted" style="font-weight:400">· עד ${esc(day(P_PHASES[g.ph].days))}</span></h3><ol>${g.items.map((x) => `<li style="margin-bottom:6px"><b>${esc(x.title)}</b> <span class="tag">${esc(x.area)}</span><br><span class="muted">${esc(x.why)}</span></li>`).join('')}</ol>`).join('')}
+  ${p.tasksAdded ? '<p class="muted">אפשר למצוא את התוכנית בלשונית "משימות", עם תאריכים ותתי-משימות שאפשר לתעדף בגרירה.</p>' : '<p class="muted">לחיצה על "הוסף למשימות" יוצרת משימה לכל שלב, עם תתי-משימות ותאריכי יעד.</p>'}</div>
+  <div class="card"><h2>איך נעבוד ביחד</h2><ul>${p.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul><p class="muted">התוכנית היא המלצה כללית לתכנון עבודה, ואינה ייעוץ משפטי, פיננסי או רפואי.</p></div>`;
+}
+
 /* ---------- ניהול (מנהל בלבד, קריאה בלבד) ---------- */
 const ownerSummary = (w) => {
   const d = Object.assign(empty(), w.data);
@@ -552,6 +757,7 @@ function adminView() {
     <div class="card"><h2>משימות (${d.tasks.length})</h2>${tbl(d.tasks, ['משימה', 'פרויקט', 'יעד', 'סטטוס'], (t) => [esc(t.title), esc(pn(d, t.project)), esc(t.due || ''), t.done ? 'הושלמה' : 'פתוחה'])}</div>
     <div class="card"><h2>שעות (${d.time.length})</h2>${tbl([...d.time].reverse(), ['תאריך', 'פרויקט', 'תיאור', 'שעות', 'סכום', 'חויב'], (t) => [esc(t.date), esc(pn(d, t.project)), esc(t.desc), t.hours, money(t.hours * t.rate), t.invoice ? 'כן' : 'לא'])}</div>
     <div class="card"><h2>חשבוניות (${d.invoices.length})</h2>${tbl(d.invoices, ['מס׳', 'תאריך', 'לקוח', 'סכום', 'סטטוס'], (i) => [i.no, esc(i.date), esc(cn(d, i.client)), money(i.total), i.paid ? 'שולמה' : 'פתוחה'])}</div>
+    <div class="card"><h2>אפיונים אישיים (${d.profiles.length})</h2>${tbl(d.profiles, ['שם', 'תפקיד', 'אופי', 'נוצר', 'פעולות בתוכנית'], (p) => [esc(p.name), esc(P_ROLES[p.role] || ''), esc(p.archetype), esc(new Date(p.createdAt).toLocaleDateString('he-IL')), p.plan.length])}</div>
     <div class="card"><h2>אבחונים (${d.diagnostics.length})</h2>${tbl(d.diagnostics, ['תאריך', 'לקוח', 'ציון כולל'], (g) => { const sc = scoreOf(g); return [esc(g.date), esc(cn(d, g.client)), Math.round(sc.reduce((x, y) => x + y.pct, 0) / sc.length) + '%']; })}</div>`;
   }
   const sums = list.map((w) => ({ w, ...ownerSummary(w) }));
@@ -587,6 +793,7 @@ const TOUR = [
   { target: '[data-do=timeNew]', title: 'רישום שעות', text: 'לחץ על "+ שעות", בחר פרויקט, הזן שעות ותיאור. הסכום מחושב לפי התעריף השעתי.', snap: () => S.time.length, done: (b) => S.time.length > b },
   { target: '[data-do=invoiceMake]', title: 'הפקת חשבונית', text: 'הכפתור הזה מאחד את כל השעות שטרם חויבו לחשבונית לכל לקוח. לחץ עליו.', snap: () => S.invoices.length, done: (b) => S.invoices.length > b },
   { go: 'diagnostic', target: '[data-do=diagNew]', title: 'אבחון עסקי', text: 'שאלון של 20 שאלות ב-5 תחומים, וניתוח SWOT. הדוח מדרג כל תחום ומציע מה לשפר. מתאים לפגישת היכרות עם לקוח חדש.' },
+  { go: 'profile', target: '[data-do=profNew]', title: 'אפיון אישי', text: 'שאלון קצר לכל שותף, מייסד או מטפל. בסופו מתקבלת תוכנית אישית ל-90 יום לפי התפקיד, החוזקות והמטרות, שאפשר להפוך למשימות עם תאריכים בלחיצה אחת.' },
   { go: 'plan', target: '[data-do=planEdit]', title: 'תוכנית ותחזית', text: 'משנים את ההנחות (הכנסה, צמיחה, הוצאות) והגרף והטבלה מתעדכנים: נקודת איזון, מתי נגמר המזומן ויתרה בסוף התקופה.' },
   { go: 'market', target: '[data-do=reqNew]', title: 'שוק ייעוץ', text: Cloud.enabled ? 'מפרסמים בקשה ומקבלים הצעות מחיר מיועצים אחרים, או מגישים הצעה לבקשות של אחרים. הצעות המחיר גלויות רק לבעל הבקשה ולמגיש.' : 'מפרסמים בקשה ומשווים הצעות מחיר. (במצב מקומי זו הדגמה; בגרסה המחוברת השוק משותף בין משתמשים.)' },
   { go: 'dashboard', title: 'סיימת!', text: 'לחיצה על "הדרכה" בפינה מפעילה אותה שוב בכל רגע. טיפים: רשום שעות מיד אחרי כל פגישה, והפק חשבונית פעם בשבוע; הרץ אבחון לכל לקוח חדש לפני הצעת מחיר.', last: true },
