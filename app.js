@@ -91,6 +91,7 @@ const VIEWS = {
 };
 function render() {
   if (Cloud.enabled && (loading || !me)) {
+    tourClear(); // אם התנתקו באמצע ההדרכה, לא משאירים את החלון מעל מסך הכניסה
     $('#nav').innerHTML = '';
     $('#view').innerHTML = loading ? '<div class="empty">טוען…</div>' : loginView();
     return;
@@ -98,14 +99,14 @@ function render() {
   const id = (location.hash || '#dashboard').slice(1);
   const [, fn] = VIEWS[id] || VIEWS.dashboard;
   const help = '<button class="sm" data-do="tourStart">הדרכה</button>';
-  const who = `<span class="who">${Cloud.enabled ? `${esc(me.email)} · <small id="sv"></small> ` : ''}${help}${Cloud.enabled ? ' <button class="sm" data-do="logout">יציאה</button>' : ''}</span>`;
+  const who = `<span class="who">${Cloud.enabled ? `${esc(me.label)} · <small id="sv"></small> ` : ''}${help}${Cloud.enabled ? ' <button class="sm" data-do="logout">יציאה</button>' : ''}</span>`;
   $('#nav').innerHTML = Object.entries(VIEWS).map(([k, [t]]) => `<a href="#${k}" class="${k === id ? 'on' : ''}">${t}</a>`).join('') + who;
   $('#view').innerHTML = fn();
   tourRender();
 }
 function loginView() {
   return `<div class="card login"><h1>כניסה למערכת</h1>
-  <form id="lf"><label for="em">מייל</label><input id="em" type="email" autocomplete="email" required>
+  <form id="lf"><label for="em">מייל או שם משתמש</label><input id="em" type="text" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" required>
   <label for="pw">סיסמה</label><input id="pw" type="password" autocomplete="current-password" minlength="6">
   <p id="lerr" class="err" role="alert"></p>
   <div class="row"><button class="pri">כניסה</button><button type="button" data-do="signup">הרשמה</button><button type="button" data-do="forgot">שכחתי סיסמה</button></div></form>
@@ -419,7 +420,7 @@ const ACTIONS = {
   tourFinish: () => tourFinish(),
   signup: async () => { const [em, pw] = creds(); const r = await Cloud.signUp(em, pw); if (!r.ok) authMsg(r.error); },
   googleIn: async () => { const r = await Cloud.google(); if (!r.ok) authMsg(r.error); },
-  forgot: async () => { const [em] = creds(); if (!em) return authMsg('יש להזין מייל'); const r = await Cloud.reset(em); authMsg(r.ok ? 'נשלח מייל לאיפוס סיסמה' : r.error, r.ok); },
+  forgot: async () => { const [em] = creds(); if (!em) return authMsg('יש להזין מייל או שם משתמש'); const r = await Cloud.reset(em); authMsg(r.ok ? 'נשלח מייל לאיפוס סיסמה' : r.error, r.ok); },
   export: () => textBox('גיבוי נתונים', JSON.stringify(S), 'העתק ושמור את הטקסט בקובץ. לשחזור השתמש ב״ייבוא״.'),
   import: () => show('<form method="dialog"><h2>ייבוא גיבוי</h2><p class="muted">הדבק כאן את טקסט הגיבוי. הנתונים הנוכחיים יוחלפו.</p><textarea id="imp" style="min-height:160px;direction:ltr"></textarea><div class="row"><button class="pri" value="ok">ייבוא</button><button value="cancel" formnovalidate>ביטול</button></div></form>', (d) => {
     d.querySelector('form').onsubmit = (ev) => { if (ev.submitter?.value !== 'ok') return; try { S = Object.assign(empty(), JSON.parse(d.querySelector('#imp').value)); save(); render(); } catch { setTimeout(() => note('הטקסט אינו גיבוי תקין'), 0); } };
@@ -448,9 +449,10 @@ const TOUR = [
   { go: 'dashboard', title: 'סיימת!', text: 'לחיצה על "הדרכה" בפינה מפעילה אותה שוב בכל רגע. טיפים: רשום שעות מיד אחרי כל פגישה, והפק חשבונית פעם בשבוע; הרץ אבחון לכל לקוח חדש לפני הצעת מחיר.', last: true },
 ];
 let tour = null; // { i, base }
+const tourClear = () => document.querySelectorAll('.tour-ring, .tour-pop').forEach((e) => e.remove());
 function tourStart() { tour = { i: 0, base: null }; tourEnter(); }
 function tourFinish() {
-  tour = null; document.querySelector('.tour-ring')?.remove(); document.querySelector('.tour-pop')?.remove();
+  tour = null; tourClear();
   if (!S.settings.tourDone) { S.settings.tourDone = true; save(); }
 }
 function tourEnter() {
@@ -462,7 +464,7 @@ function tourEnter() {
 function tourNext() { tour.i++; tour.i >= TOUR.length ? tourFinish() : tourEnter(); }
 function tourBack() { if (tour.i > 0) { tour.i--; tourEnter(); } }
 function tourRender() {
-  document.querySelector('.tour-ring')?.remove(); document.querySelector('.tour-pop')?.remove();
+  tourClear();
   if (!tour) { // התחלה אוטומטית למשתמש חדש
     if (!tourAutoTried && !S.settings.tourDone && !S.clients.length && !S.projects.length) { tourAutoTried = true; tourStart(); }
     return;

@@ -11,16 +11,29 @@
   const db = firebase.firestore();
   if (window.FIREBASE_EMULATOR) { auth.useEmulator('http://127.0.0.1:9099'); db.useEmulator('127.0.0.1', 8089); } // לבדיקות מקומיות בלבד
   const SESSION = Math.random().toString(36).slice(2);
-  const userOf = (u) => ({ uid: u.uid, email: u.email || '', name: u.displayName || (u.email || '').split('@')[0] });
+  /* כניסה עם שם משתמש: Firebase מזהה לפי מייל, ולכן שם משתמש ממופה לכתובת פנימית שאינה נשלחת לשום מקום (.invalid) */
+  const UDOM = '@username.invalid';
+  const isUsername = (e) => (e || '').endsWith(UDOM);
+  const toEmail = (v) => {
+    v = (v || '').trim();
+    if (v.includes('@')) return { email: v };
+    const u = v.toLowerCase();
+    if (!/^[a-z0-9._-]{3,30}$/.test(u)) return { error: 'שם משתמש: 3 עד 30 תווים באנגלית, ספרות, נקודה, קו תחתון או מקף. אפשר גם להשתמש במייל.' };
+    return { email: u + UDOM };
+  };
+  const userOf = (u) => {
+    const e = u.email || ''; const local = e.split('@')[0];
+    return { uid: u.uid, email: e, label: isUsername(e) ? local : e, name: u.displayName || local };
+  };
 
   const ERR = {
-    'auth/invalid-email': 'כתובת המייל אינה תקינה',
+    'auth/invalid-email': 'המייל או שם המשתמש אינם תקינים',
     'auth/missing-password': 'יש להזין סיסמה',
     'auth/weak-password': 'הסיסמה קצרה מדי (לפחות 6 תווים)',
-    'auth/email-already-in-use': 'כבר קיים משתמש עם המייל הזה',
-    'auth/user-not-found': 'מייל או סיסמה שגויים',
-    'auth/wrong-password': 'מייל או סיסמה שגויים',
-    'auth/invalid-credential': 'מייל או סיסמה שגויים',
+    'auth/email-already-in-use': 'המייל או שם המשתמש כבר תפוסים',
+    'auth/user-not-found': 'מייל / שם משתמש או סיסמה שגויים',
+    'auth/wrong-password': 'מייל / שם משתמש או סיסמה שגויים',
+    'auth/invalid-credential': 'מייל / שם משתמש או סיסמה שגויים',
     'auth/too-many-requests': 'יותר מדי ניסיונות. נסה שוב בעוד כמה דקות',
     'auth/popup-closed-by-user': 'החלון נסגר לפני סיום ההתחברות',
     'auth/unauthorized-domain': 'הדומיין הזה לא מורשה ב-Firebase (Authentication → Settings → Authorized domains)',
@@ -54,10 +67,13 @@
   window.Cloud = {
     enabled: true,
     init(onUser) { auth.onAuthStateChanged((u) => onUser(u ? userOf(u) : null)); },
-    signIn: (em, pw) => wrap(auth.signInWithEmailAndPassword(em, pw)),
-    signUp: (em, pw) => wrap(auth.createUserWithEmailAndPassword(em, pw)),
+    signIn(id, pw) { const r = toEmail(id); return r.error ? Promise.resolve({ ok: false, error: r.error }) : wrap(auth.signInWithEmailAndPassword(r.email, pw)); },
+    signUp(id, pw) { const r = toEmail(id); return r.error ? Promise.resolve({ ok: false, error: r.error }) : wrap(auth.createUserWithEmailAndPassword(r.email, pw)); },
     google: () => wrap(auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())),
-    reset: (em) => wrap(auth.sendPasswordResetEmail(em)),
+    reset(id) {
+      if (!(id || '').includes('@')) return Promise.resolve({ ok: false, error: 'איפוס במייל זמין רק למי שנרשם עם מייל. למשתמש עם שם משתמש יש לבקש מהמנהל לאפס את הסיסמה.' });
+      return wrap(auth.sendPasswordResetEmail(id.trim()));
+    },
     signOut: async () => { await window.Cloud.flush(); stopMarket(); wsUnsub?.(); wsUnsub = null; return auth.signOut(); },
 
     async loadWorkspace(uid) {
