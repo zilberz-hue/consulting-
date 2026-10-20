@@ -208,24 +208,38 @@ function tasks() {
 }
 /* גרירה בעכבר ובמגע (pointer events): משימות ראשיות, ותתי-משימות בתוך המשימה שלהן */
 let drag = null;
+const dragRect = (el) => (el.matches('tbody') ? el.rows[0] : el).getBoundingClientRect(); // tbody: מודדים לפי השורה הראשונה
+function dragActivate() {
+  drag.active = true; drag.item.classList.add('dragging'); document.body.classList.add('dragging-now');
+  if (drag.kind === 'task') drag.box.classList.add('drag-tasks'); // בזמן גרירה מקפלים את תתי-המשימות
+  getSelection()?.removeAllRanges();
+  try { drag.h.setPointerCapture(drag.id); } catch { /* ממשיכים גם בלי לכידה */ }
+}
 document.addEventListener('pointerdown', (ev) => {
-  const h = ev.target.closest('[data-handle]'); if (!h || ev.button > 0) return;
-  const kind = h.dataset.handle; const item = h.closest(kind === 'task' ? 'tbody[data-open]' : 'tr[data-sub]');
-  ev.preventDefault(); h.setPointerCapture(ev.pointerId); item.classList.add('dragging');
-  if (kind === 'task') item.parentElement.classList.add('drag-tasks'); // בזמן גרירה מקפלים את תתי-המשימות
-  drag = { kind, item, box: item.parentElement, id: ev.pointerId };
+  if (ev.button > 0) return;
+  let h = ev.target.closest('[data-handle]'); let now = true;
+  if (!h) { // בעכבר אפשר לגרור מכל מקום בשורה, חוץ מכפתורים ושדות; במגע רק מהידית (כדי לא לחסום גלילה)
+    if (ev.pointerType !== 'mouse' || ev.target.closest('button, input, select, textarea, a')) return;
+    h = ev.target.closest('tr.trow, tr[data-sub]')?.querySelector('[data-handle]'); now = false;
+    if (!h) return;
+  }
+  const kind = h.dataset.handle; const item = h.closest(kind === 'task' ? 'tbody[data-open]' : 'tr[data-sub]'); if (!item) return;
+  drag = { kind, item, h, box: item.parentElement, id: ev.pointerId, x: ev.clientX, y: ev.clientY, active: false };
+  if (now) { ev.preventDefault(); dragActivate(); }
 });
 document.addEventListener('pointermove', (ev) => {
   if (!drag || ev.pointerId !== drag.id) return;
+  if (!drag.active) { if (Math.abs(ev.clientY - drag.y) + Math.abs(ev.clientX - drag.x) < 5) return; dragActivate(); } // סף קטן: לחיצה רגילה לא נחשבת גרירה
   const sibs = [...drag.box.children].filter((el) => el.hasAttribute('data-open') && el !== drag.item);
-  const before = sibs.find((r) => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+  const before = sibs.find((r) => { const b = dragRect(r); return ev.clientY < b.top + b.height / 2; });
   if (before) drag.box.insertBefore(drag.item, before); else if (sibs.length) sibs[sibs.length - 1].after(drag.item);
   if (ev.clientY < 70) scrollBy(0, -14); else if (ev.clientY > innerHeight - 70) scrollBy(0, 14);
 });
 const endDrag = (ev) => {
   if (!drag || ev.pointerId !== drag.id) return;
-  const { kind, item, box } = drag; drag = null;
-  item.classList.remove('dragging'); box.classList.remove('drag-tasks');
+  const { kind, item, box, active } = drag; drag = null;
+  if (!active) return; // רק לחיצה
+  item.classList.remove('dragging'); box.classList.remove('drag-tasks'); document.body.classList.remove('dragging-now');
   const ids = [...box.children].filter((el) => el.hasAttribute('data-open')).map((el) => el.dataset.task || el.dataset.sub);
   if (kind === 'task') setTasksOrder(ids); else setSubsOrder(box.dataset.subs, ids);
 };
