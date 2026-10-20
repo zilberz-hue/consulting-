@@ -51,17 +51,23 @@
   const wsRef = (uid) => db.collection('workspaces').doc(uid);
 
   let latest = null; let retryTimer = null;
+  let knownAt = 0; // updatedAt של הגרסה האחרונה שהסשן הזה ראה או כתב: עדכון ישן מהשרת לא יידרוס שינויים מקומיים
+  let inflight = 0; // כתיבות שעדיין לא אושרו
+
   async function write(uid, data, cb) {
     cb?.('saving'); clearTimeout(retryTimer);
     const doc = { json: JSON.stringify(data), writer: SESSION, updatedAt: Date.now() };
+    knownAt = doc.updatedAt; inflight++;
     let err = null;
-    try { await wsRef(uid).set({ ...doc, label: myLabel }); cb?.('saved'); return; } catch (e) { err = e; }
-    if (err.code === 'permission-denied') { // כללי Firestore ישנים לא מכירים את השדה label: שומרים בלעדיו
-      try { await wsRef(uid).set(doc); cb?.('saved'); return; } catch (e2) { err = e2; }
-    }
-    const hint = err.code === 'permission-denied' ? ' (השרת דחה את הכתיבה: כנראה כללי האבטחה ב-Firebase לא פורסמו או לא מעודכנים)' : '';
-    cb?.('error', msg(err) + hint);
-    retryTimer = setTimeout(() => { if (latest && !pending) write(latest.uid, latest.data, latest.cb); }, 8000); // ממשיכים לנסות עד שמצליח
+    try {
+      try { await wsRef(uid).set({ ...doc, label: myLabel }); cb?.('saved'); return; } catch (e) { err = e; }
+      if (err.code === 'permission-denied') { // כללי Firestore ישנים לא מכירים את השדה label: שומרים בלעדיו
+        try { await wsRef(uid).set(doc); cb?.('saved'); return; } catch (e2) { err = e2; }
+      }
+      const hint = err.code === 'permission-denied' ? ' (השרת דחה את הכתיבה: כנראה כללי האבטחה ב-Firebase לא פורסמו או לא מעודכנים)' : '';
+      cb?.('error', msg(err) + hint);
+      retryTimer = setTimeout(() => { if (latest && !pending) write(latest.uid, latest.data, latest.cb); }, 8000); // ממשיכים לנסות עד שמצליח
+    } finally { inflight--; }
   }
 
   /* ----- שוק ----- */
@@ -86,6 +92,8 @@
 
     async loadWorkspace(uid) {
       const snap = await wsRef(uid).get();
+      window.Cloud.loadedAt = snap.exists ? (snap.data().updatedAt || 0) : 0; // לשחזור שינויים מקומיים שלא הגיעו לענן
+      knownAt = window.Cloud.loadedAt;
       if (snap.exists && snap.data().label !== myLabel) wsRef(uid).set({ label: myLabel }, { merge: true }).catch(() => {}); // כדי שמנהל יראה למי שייכת סביבת העבודה
       return snap.exists ? JSON.parse(snap.data().json || '{}') : null;
     },
@@ -106,8 +114,9 @@
     queueSave(uid, data, cb) {
       pending = { uid, data, cb }; latest = pending; cb?.('saving');
       clearTimeout(timer);
-      timer = setTimeout(() => { const p = pending; pending = null; if (p) write(p.uid, p.data, p.cb); }, 600);
+      timer = setTimeout(() => { const p = pending; pending = null; if (p) write(p.uid, p.data, p.cb); }, 250);
     },
+    hasPending: () => !!pending,
     retryNow() { if (latest) { clearTimeout(timer); pending = null; return write(latest.uid, latest.data, latest.cb); } },
     async flush() {
       clearTimeout(timer);
@@ -119,7 +128,11 @@
       wsUnsub?.();
       wsUnsub = wsRef(uid).onSnapshot((snap) => {
         if (!snap.exists || snap.metadata.hasPendingWrites) return;
-        const d = snap.data(); if (d.writer === SESSION) return;
+        const d = snap.data();
+        if (d.writer === SESSION) return; // הכתיבה של הסשן הזה
+        if ((d.updatedAt || 0) === knownAt) return; // אותה גרסה שכבר יש לנו (למשל הצילום הראשון אחרי הטעינה)
+        if (pending || inflight) return; // יש שינויים מקומיים שעוד לא נשמרו: לא דורסים אותם
+        knownAt = d.updatedAt || 0;
         try { onRemote(JSON.parse(d.json || '{}')); } catch { /* מסמך פגום, מתעלמים */ }
       });
     },

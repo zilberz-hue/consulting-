@@ -25,11 +25,14 @@ const empty = () => ({
 let S;
 const readLocal = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } };
 S = Cloud.enabled ? empty() : Object.assign(empty(), readLocal() || {});
+const PEND = 'consulting-suite-unsynced-'; // עותק מקומי של שינויים שעוד לא אושרו בענן; נמחק כשהשמירה מצליחה
+const readPend = (uid) => { try { return JSON.parse(localStorage.getItem(PEND + uid) || 'null'); } catch { return null; } };
 const privateState = () => { const { requests, ...rest } = S; return rest; };
 let saveStatus = { st: '', err: '' }; // saving | saved | error
 const SV_TEXT = { saving: 'שומר…', saved: 'נשמר ✓', error: 'שגיאת שמירה' };
 const setSaveState = (st, err) => {
   saveStatus = { st, err: err || '' };
+  if (st === 'saved' && me && !Cloud.hasPending()) { try { localStorage.removeItem(PEND + me.uid); } catch { /* ignore */ } }
   const el = $('#sv'); if (el) { el.textContent = SV_TEXT[st] || ''; el.title = err || ''; el.style.color = st === 'error' ? 'var(--bad)' : ''; }
   let b = $('#sb'); // באנר בולט כשהשמירה נכשלת, כדי שלא יאבדו שינויים בלי שהמשתמש יודע
   if (st === 'error') {
@@ -39,7 +42,11 @@ const setSaveState = (st, err) => {
 };
 addEventListener('beforeunload', (e) => { if (Cloud.enabled && (saveStatus.st === 'saving' || saveStatus.st === 'error')) { e.preventDefault(); e.returnValue = ''; } });
 const save = () => {
-  if (Cloud.enabled) { if (me) Cloud.queueSave(me.uid, privateState(), setSaveState); return; }
+  if (Cloud.enabled) {
+    if (!me) return;
+    try { localStorage.setItem(PEND + me.uid, JSON.stringify({ ts: Date.now(), data: privateState() })); } catch { /* מכסה מלאה או חסום */ }
+    Cloud.queueSave(me.uid, privateState(), setSaveState); return;
+  }
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* storage blocked */ }
 };
 const by = (list, id) => list.find((x) => x.id === id);
@@ -210,7 +217,13 @@ function tasks() {
     ${!t.done && p.all && !fold ? `<tr class="subrow"><td></td><td></td><td colspan="5">${subTable(t)}</td></tr>` : ''}</tbody>`;
   };
   return `<h1>משימות</h1><div class="card"><div class="bar"><span class="muted">${open.length} פתוחות · גרור את ⠿ כדי לתעדף, הדחופה ביותר למעלה</span>
-  <span><button data-do="taskSort" title="סדר מחדש לפי תאריך יעד">מיין לפי תאריך</button> <button class="pri" data-do="taskNew">+ משימה</button></span></div>
+  <span><select id="tsort" aria-label="מיין את המשימות הפתוחות" title="הסדר החדש נשמר כסדר העדיפות, ואפשר להמשיך לגרור" style="width:auto">
+    <option value="" selected disabled>מיין לפי…</option>
+    <option value="due-asc">תאריך יעד: הקרוב ראשון</option><option value="due-desc">תאריך יעד: הרחוק ראשון</option>
+    <option value="project">פרויקט</option><option value="title">שם המשימה (א-ת)</option>
+    <option value="newest">נוספו לאחרונה</option><option value="oldest">הוותיקות ראשונות</option>
+    <option value="subs-open">הכי הרבה תתי-משימות פתוחות</option><option value="progress">הכי קרובות להשלמה</option>
+  </select> <button class="pri" data-do="taskNew">+ משימה</button></span></div>
   ${S.tasks.length ? `<div class="scroll"><table id="tl">${open.map((t, i) => block(t, i + 1)).join('')}${done.map((t) => block(t)).join('')}</table></div>` : '<div class="empty">אין משימות</div>'}</div>`;
 }
 /* גרירה בעכבר ובמגע (pointer events): משימות ראשיות, ותתי-משימות בתוך המשימה שלהן */
@@ -251,6 +264,25 @@ const endDrag = (ev) => {
   if (kind === 'task') setTasksOrder(ids); else setSubsOrder(box.dataset.subs, ids);
 };
 document.addEventListener('pointerup', endDrag); document.addEventListener('pointercancel', endDrag);
+/* מיון המשימות הפתוחות: הסדר החדש נשמר כסדר העדיפות (אפשר להמשיך לגרור). ריקים (בלי תאריך/פרויקט) תמיד בסוף. */
+const cmpEmptyLast = (x, y, f) => (x ? (y ? f(x, y) : -1) : (y ? 1 : 0));
+const cmpDue = (a, b, dir) => cmpEmptyLast(a.due, b.due, (x, y) => dir * x.localeCompare(y));
+const openSubs = (t) => (t.subs || []).filter((s) => !s.done).length;
+const doneRatio = (t) => { const p = subProg(t); return p.all ? p.done / p.all : -1; }; // בלי תתי-משימות: בסוף
+const TASK_SORTS = {
+  'due-asc': (a, b) => cmpDue(a, b, 1),
+  'due-desc': (a, b) => cmpDue(a, b, -1),
+  project: (a, b) => cmpEmptyLast(a.project && projectName(a.project), b.project && projectName(b.project), (x, y) => x.localeCompare(y, 'he')) || cmpDue(a, b, 1),
+  title: (a, b) => a.title.localeCompare(b.title, 'he'),
+  newest: (a, b) => (b.created || 0) - (a.created || 0),
+  oldest: (a, b) => (a.created || 0) - (b.created || 0),
+  'subs-open': (a, b) => openSubs(b) - openSubs(a) || cmpDue(a, b, 1),
+  progress: (a, b) => doneRatio(b) - doneRatio(a) || cmpDue(a, b, 1),
+};
+document.addEventListener('change', (ev) => {
+  if (ev.target.id !== 'tsort') return;
+  const f = TASK_SORTS[ev.target.value]; if (f) setTasksOrder(openTasks().sort(f).map((t) => t.id)); // ה-sort יציב: שוויון שומר את הסדר הקודם
+});
 function setTasksOrder(ids) {
   const open = ids.map((id) => by(S.tasks, id)).filter(Boolean);
   S.tasks = [...open, ...S.tasks.filter((t) => t.done || !open.includes(t))];
@@ -410,10 +442,9 @@ const ACTIONS = {
   projectNew: () => need(S.clients.length, 'יש להוסיף לקוח קודם') && form('פרויקט חדש', PROJECT_F(), { status: 'פעיל' }, (v) => { if (v.name) S.projects.push({ id: uid(), ...v }); }),
   projectEdit: (id) => form('עריכת פרויקט', PROJECT_F(), by(S.projects, id), (v) => Object.assign(by(S.projects, id), v)),
   projectDel: (id) => delFrom(S.projects, id, () => { S.tasks = S.tasks.filter((t) => t.project !== id); S.time = S.time.filter((t) => t.project !== id || t.invoice); }),
-  taskNew: () => form('משימה חדשה', TASK_F(), null, (v) => { if (v.title) S.tasks.push({ id: uid(), done: false, ...v }); }),
+  taskNew: () => form('משימה חדשה', TASK_F(), null, (v) => { if (v.title) S.tasks.push({ id: uid(), done: false, created: Date.now(), ...v }); }),
   taskEdit: (id) => form('עריכת משימה', TASK_F(), by(S.tasks, id), (v) => Object.assign(by(S.tasks, id), v)),
   taskDel: (id) => delFrom(S.tasks, id),
-  taskSort: () => setTasksOrder(openTasks().sort((a, b) => (a.due || '9').localeCompare(b.due || '9')).map((t) => t.id)),
   taskToggle: (id) => { const t = by(S.tasks, id); t.done = !t.done; save(); render(); },
   taskFold: (id) => { collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id); render(); },
   subNew: (id) => form('תת-משימה חדשה', SUB_F(), null, (v) => { if (v.title) { const t = by(S.tasks, id); (t.subs ||= []).push({ id: uid(), done: false, ...v }); collapsed.delete(id); } }),
@@ -612,6 +643,7 @@ $('#dlg').addEventListener('close', () => { if (tour) tourRender(); });
 /* ---------- הפעלה ---------- */
 if (Cloud.enabled) {
   window.addEventListener('pagehide', () => Cloud.flush());
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') Cloud.flush(); }); // מעבר לטאב אחר או נעילת מסך
   Cloud.init(async (user) => {
     if (!user) { me = null; isAdmin = false; adminData = null; adminUser = null; S = empty(); M = []; tour = null; tourAutoTried = false; Cloud.stopMarket(); loading = false; return render(); }
     me = user; loading = true; isAdmin = false; adminData = null; adminUser = null; render();
@@ -622,6 +654,11 @@ if (Cloud.enabled) {
         if (Object.keys(data).length) { S = Object.assign(empty(), data); save(); try { localStorage.removeItem(KEY); } catch { /* ignore */ } }
       }
       S = Object.assign(empty(), data);
+      const pend = readPend(user.uid); // שינויים שנעשו ולא הספיקו להישמר (רענון או סגירה מהירה, או רשת שנפלה)
+      if (pend && pend.ts > (Cloud.loadedAt || 0)) {
+        S = Object.assign(empty(), pend.data); save();
+        setTimeout(() => note('שוחזרו שינויים אחרונים שלא הספיקו להישמר בענן לפני שהדף נסגר, והם נשמרים עכשיו.'), 300);
+      } else if (pend) { try { localStorage.removeItem(PEND + user.uid); } catch { /* ignore */ } }
       isAdmin = await Cloud.isAdmin(user.uid);
       Cloud.watchWorkspace(user.uid, (remote) => { S = Object.assign(empty(), remote); render(); });
       Cloud.watchRequests(user.uid, (list) => { M = list; if (location.hash === '#market') render(); });
