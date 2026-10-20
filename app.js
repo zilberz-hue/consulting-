@@ -184,7 +184,7 @@ function subTable(t) {
     <td style="width:30px"><input type="checkbox" aria-label="סמן תת-משימה כהושלמה" ${x.done ? 'checked' : ''} data-do="subToggle" data-id="${t.id}" data-sid="${x.id}"></td>
     <td style="${x.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${esc(x.title)}</td>
     <td>${dueTag(x.due, x.done, t.due)}</td>
-    <td class="nowrap">${x.done ? '' : `${btn('subUp', x, 'העלה בעדיפות', '▲')} ${btn('subDown', x, 'הורד בעדיפות', '▼')} `}${btn('subEdit', x, 'עריכה', 'עריכה')} <button class="sm del" data-do="subDel" data-id="${t.id}" data-sid="${x.id}">מחיקה</button></td></tr>`;
+    <td class="nowrap">${btn('subEdit', x, 'עריכה', 'עריכה')} <button class="sm del" data-do="subDel" data-id="${t.id}" data-sid="${x.id}">מחיקה</button></td></tr>`;
   return `<table class="subtable"><tbody data-subs="${t.id}">${open.map(row).join('')}${done.map(row).join('')}</tbody></table>
     <div class="row subbar"><button class="sm" data-do="subNew" data-id="${t.id}">+ תת-משימה</button>${open.length > 1 ? `<button class="sm" data-do="subSort" data-id="${t.id}" title="סדר מחדש לפי תאריך יעד">מיין לפי תאריך</button>` : ''}</div>`;
 }
@@ -199,7 +199,7 @@ function tasks() {
     <td style="${t.done ? 'text-decoration:line-through;color:var(--mut)' : ''}">${p.all && !t.done ? `<button class="fold" data-do="taskFold" data-id="${t.id}" aria-expanded="${!fold}" aria-label="${fold ? 'הצג' : 'הסתר'} תתי-משימות">${fold ? '▸' : '▾'}</button> ` : ''}${esc(t.title)}${p.all ? ` <span class="tag ${p.done === p.all ? 'ok' : ''}" title="תתי-משימות שהושלמו">${p.done}/${p.all}</span>` : ''}</td>
     <td class="muted">${esc(projectName(t.project))}</td>
     <td>${dueTag(t.due, t.done)}</td>
-    <td class="nowrap">${t.done ? '' : `<button class="sm" data-do="subNew" data-id="${t.id}" title="הוסף תת-משימה">+ תת</button> <button class="sm" data-do="taskUp" data-id="${t.id}" aria-label="העלה בעדיפות" title="העלה בעדיפות">▲</button> <button class="sm" data-do="taskDown" data-id="${t.id}" aria-label="הורד בעדיפות" title="הורד בעדיפות">▼</button> `}${edit('task', t.id)}</td></tr>
+    <td class="nowrap">${t.done ? '' : `<button class="sm" data-do="subNew" data-id="${t.id}" title="הוסף תת-משימה">+ תת</button> `}${edit('task', t.id)}</td></tr>
     ${!t.done && p.all && !fold ? `<tr class="subrow"><td></td><td></td><td colspan="5">${subTable(t)}</td></tr>` : ''}</tbody>`;
   };
   return `<h1>משימות</h1><div class="card"><div class="bar"><span class="muted">${open.length} פתוחות · גרור את ⠿ כדי לתעדף, הדחופה ביותר למעלה</span>
@@ -240,18 +240,6 @@ function setSubsOrder(tid, ids) {
   const open = ids.map((id) => by(t.subs || [], id)).filter(Boolean);
   t.subs = [...open, ...(t.subs || []).filter((x) => x.done || !open.includes(x))];
   save(); render();
-}
-function moveTask(id, d) {
-  const ids = openTasks().map((t) => t.id); const i = ids.indexOf(id); const j = i + d;
-  if (i < 0 || j < 0 || j >= ids.length) return;
-  [ids[i], ids[j]] = [ids[j], ids[i]]; setTasksOrder(ids);
-  document.querySelector(`[data-do="${d < 0 ? 'taskUp' : 'taskDown'}"][data-id="${id}"]`)?.focus(); // ממשיכים להזיז במקלדת
-}
-function moveSub(tid, sid, d) {
-  const t = by(S.tasks, tid); const ids = (t?.subs || []).filter((x) => !x.done).map((x) => x.id); const i = ids.indexOf(sid); const j = i + d;
-  if (i < 0 || j < 0 || j >= ids.length) return;
-  [ids[i], ids[j]] = [ids[j], ids[i]]; setSubsOrder(tid, ids);
-  document.querySelector(`[data-do="${d < 0 ? 'subUp' : 'subDown'}"][data-sid="${sid}"]`)?.focus();
 }
 const SUB_F = () => [{ k: 'title', label: 'תת-משימה' }, { k: 'due', label: 'תאריך יעד', type: 'date' }];
 const TASK_F = () => [{ k: 'title', label: 'משימה' }, { k: 'project', label: 'פרויקט', type: 'select', opts: [['', '— ללא —'], ...projectOpts()] }, { k: 'due', label: 'תאריך יעד', type: 'date' }];
@@ -404,8 +392,6 @@ const ACTIONS = {
   taskNew: () => form('משימה חדשה', TASK_F(), null, (v) => { if (v.title) S.tasks.push({ id: uid(), done: false, ...v }); }),
   taskEdit: (id) => form('עריכת משימה', TASK_F(), by(S.tasks, id), (v) => Object.assign(by(S.tasks, id), v)),
   taskDel: (id) => delFrom(S.tasks, id),
-  taskUp: (id) => moveTask(id, -1),
-  taskDown: (id) => moveTask(id, 1),
   taskSort: () => setTasksOrder(openTasks().sort((a, b) => (a.due || '9').localeCompare(b.due || '9')).map((t) => t.id)),
   taskToggle: (id) => { const t = by(S.tasks, id); t.done = !t.done; save(); render(); },
   taskFold: (id) => { collapsed.has(id) ? collapsed.delete(id) : collapsed.add(id); render(); },
@@ -413,8 +399,6 @@ const ACTIONS = {
   subEdit: (id, d) => form('עריכת תת-משימה', SUB_F(), by(by(S.tasks, id).subs, d.sid), (v) => Object.assign(by(by(S.tasks, id).subs, d.sid), v)),
   subDel: (id, d) => ask('למחוק את תת-המשימה?', () => { const t = by(S.tasks, id); t.subs = t.subs.filter((x) => x.id !== d.sid); save(); render(); }),
   subToggle: (id, d) => { const x = by(by(S.tasks, id).subs, d.sid); x.done = !x.done; save(); render(); },
-  subUp: (id, d) => moveSub(id, d.sid, -1),
-  subDown: (id, d) => moveSub(id, d.sid, 1),
   subSort: (id) => setSubsOrder(id, (by(S.tasks, id).subs || []).filter((x) => !x.done).sort((p, q) => (p.due || '9').localeCompare(q.due || '9')).map((x) => x.id)),
   rate: () => form('תעריף שעתי', [{ k: 'rate', label: 'תעריף שעתי (₪)', type: 'number' }], S.settings, (v) => { if (v.rate > 0) S.settings.rate = v.rate; }),
   timeNew: () => need(S.projects.length, 'יש להוסיף פרויקט קודם') && form('רישום שעות', TIME_F(), null, (v) => { if (v.hours > 0) S.time.push({ id: uid(), rate: S.settings.rate, ...v }); }),
@@ -545,7 +529,7 @@ const TOUR = [
   { target: '[data-do=clientNew]', title: 'הוספת לקוח', text: 'לחץ על "+ לקוח", הקלד שם ושמור.', snap: () => S.clients.length, done: (b) => S.clients.length > b },
   { target: '[data-do=projectNew]', title: 'הוספת פרויקט', text: 'כל עבודה שייכת לפרויקט של לקוח. לחץ על "+ פרויקט", בחר את הלקוח ושמור.', snap: () => S.projects.length, done: (b) => S.projects.length > b },
   { target: navTo('tasks'), title: 'משימות', text: 'עכשיו למשימות. לחץ על לשונית "משימות".', done: () => curView() === 'tasks' },
-  { target: '[data-do=taskNew]', title: 'משימה ראשונה', text: 'הוסף משימה עם תאריך יעד. את סדר העדיפויות קובעים בגרירה של ⠿ (או בחיצים), ואפשר לפרק משימה לתתי-משימות עם תאריכים משלהן (כפתור "+ תת"), גם הן ניתנות לגרירה. המשימות העליונות מופיעות גם בלוח הבקרה. משימות שעבר מועדן מסומנות באדום.', snap: () => S.tasks.length, done: (b) => S.tasks.length > b },
+  { target: '[data-do=taskNew]', title: 'משימה ראשונה', text: 'הוסף משימה עם תאריך יעד. את סדר העדיפויות קובעים בגרירה של ⠿, ואפשר לפרק משימה לתתי-משימות עם תאריכים משלהן (כפתור "+ תת"), גם הן ניתנות לגרירה. המשימות העליונות מופיעות גם בלוח הבקרה. משימות שעבר מועדן מסומנות באדום.', snap: () => S.tasks.length, done: (b) => S.tasks.length > b },
   { target: navTo('finance'), title: 'שעות וחשבוניות', text: 'לחץ על "שעות וחשבוניות".', done: () => curView() === 'finance' },
   { target: '[data-do=timeNew]', title: 'רישום שעות', text: 'לחץ על "+ שעות", בחר פרויקט, הזן שעות ותיאור. הסכום מחושב לפי התעריף השעתי.', snap: () => S.time.length, done: (b) => S.time.length > b },
   { target: '[data-do=invoiceMake]', title: 'הפקת חשבונית', text: 'הכפתור הזה מאחד את כל השעות שטרם חויבו לחשבונית לכל לקוח. לחץ עליו.', snap: () => S.invoices.length, done: (b) => S.invoices.length > b },
