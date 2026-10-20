@@ -6,13 +6,22 @@ service cloud.firestore {
       return get(/databases/$(db)/documents/requests/$(rid)).data.ownerUid == request.auth.uid;
     }
 
-    // סביבת עבודה אישית: רק הבעלים קורא וכותב
+    // מנהלים: מסמך admins/{uid} שנוצר ידנית בקונסולת Firebase. הלקוח אינו יכול ליצור או לשנות אותו.
+    function isAdmin() { return signedIn() && exists(/databases/$(db)/documents/admins/$(request.auth.uid)); }
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // סביבת עבודה אישית: הבעלים קורא וכותב; מנהל קורא בלבד
     match /workspaces/{uid} {
-      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow delete: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['json', 'writer', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['json', 'writer', 'updatedAt', 'label'])
         && request.resource.data.json is string
-        && request.resource.data.json.size() < 900000;
+        && request.resource.data.json.size() < 900000
+        && (!('label' in request.resource.data) || (request.resource.data.label is string && request.resource.data.label.size() <= 200));
     }
 
     // שוק ייעוץ: כל משתמש מחובר רואה בקשות; הצעות מחיר גלויות רק לבעל הבקשה ולמגיש

@@ -21,9 +21,11 @@
     if (!/^[a-z0-9._-]{3,30}$/.test(u)) return { error: 'שם משתמש: 3 עד 30 תווים באנגלית, ספרות, נקודה, קו תחתון או מקף. אפשר גם להשתמש במייל.' };
     return { email: u + UDOM };
   };
+  let myLabel = '';
   const userOf = (u) => {
     const e = u.email || ''; const local = e.split('@')[0];
-    return { uid: u.uid, email: e, label: isUsername(e) ? local : e, name: u.displayName || local };
+    myLabel = isUsername(e) ? local : e;
+    return { uid: u.uid, email: e, label: myLabel, name: u.displayName || local };
   };
 
   const ERR = {
@@ -51,7 +53,7 @@
   async function write(uid, data, cb) {
     cb?.('saving');
     try {
-      await wsRef(uid).set({ json: JSON.stringify(data), writer: SESSION, updatedAt: Date.now() });
+      await wsRef(uid).set({ json: JSON.stringify(data), writer: SESSION, updatedAt: Date.now(), label: myLabel });
       cb?.('saved');
     } catch (e) { cb?.('error', msg(e)); }
   }
@@ -78,7 +80,20 @@
 
     async loadWorkspace(uid) {
       const snap = await wsRef(uid).get();
+      if (snap.exists && snap.data().label !== myLabel) wsRef(uid).set({ label: myLabel }, { merge: true }).catch(() => {}); // כדי שמנהל יראה למי שייכת סביבת העבודה
       return snap.exists ? JSON.parse(snap.data().json || '{}') : null;
+    },
+    /* מנהל: מסמך admins/{uid} שנוצר ידנית בקונסולה. הלקוח לא יכול ליצור אותו (ראה firestore.rules) */
+    async isAdmin(uid) {
+      try { return (await db.collection('admins').doc(uid).get()).exists; } catch { return false; }
+    },
+    /* מנהל: כל סביבות העבודה, לקריאה בלבד */
+    async listWorkspaces() {
+      return wrap(db.collection('workspaces').get().then((snap) => snap.docs.map((d) => {
+        const x = d.data(); let data = {};
+        try { data = JSON.parse(x.json || '{}'); } catch { /* מסמך פגום */ }
+        return { uid: d.id, label: x.label || d.id.slice(0, 8), updatedAt: x.updatedAt || 0, data };
+      })));
     },
     /* שמירה מושהית; קריאות רצופות מתאחדות לכתיבה אחת */
     queueSave(uid, data, cb) {

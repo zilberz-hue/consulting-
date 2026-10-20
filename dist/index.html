@@ -117,9 +117,11 @@ window.FIREBASE_CONFIG = {
     if (!/^[a-z0-9._-]{3,30}$/.test(u)) return { error: 'שם משתמש: 3 עד 30 תווים באנגלית, ספרות, נקודה, קו תחתון או מקף. אפשר גם להשתמש במייל.' };
     return { email: u + UDOM };
   };
+  let myLabel = '';
   const userOf = (u) => {
     const e = u.email || ''; const local = e.split('@')[0];
-    return { uid: u.uid, email: e, label: isUsername(e) ? local : e, name: u.displayName || local };
+    myLabel = isUsername(e) ? local : e;
+    return { uid: u.uid, email: e, label: myLabel, name: u.displayName || local };
   };
 
   const ERR = {
@@ -147,7 +149,7 @@ window.FIREBASE_CONFIG = {
   async function write(uid, data, cb) {
     cb?.('saving');
     try {
-      await wsRef(uid).set({ json: JSON.stringify(data), writer: SESSION, updatedAt: Date.now() });
+      await wsRef(uid).set({ json: JSON.stringify(data), writer: SESSION, updatedAt: Date.now(), label: myLabel });
       cb?.('saved');
     } catch (e) { cb?.('error', msg(e)); }
   }
@@ -174,7 +176,20 @@ window.FIREBASE_CONFIG = {
 
     async loadWorkspace(uid) {
       const snap = await wsRef(uid).get();
+      if (snap.exists && snap.data().label !== myLabel) wsRef(uid).set({ label: myLabel }, { merge: true }).catch(() => {}); // כדי שמנהל יראה למי שייכת סביבת העבודה
       return snap.exists ? JSON.parse(snap.data().json || '{}') : null;
+    },
+    /* מנהל: מסמך admins/{uid} שנוצר ידנית בקונסולה. הלקוח לא יכול ליצור אותו (ראה firestore.rules) */
+    async isAdmin(uid) {
+      try { return (await db.collection('admins').doc(uid).get()).exists; } catch { return false; }
+    },
+    /* מנהל: כל סביבות העבודה, לקריאה בלבד */
+    async listWorkspaces() {
+      return wrap(db.collection('workspaces').get().then((snap) => snap.docs.map((d) => {
+        const x = d.data(); let data = {};
+        try { data = JSON.parse(x.json || '{}'); } catch { /* מסמך פגום */ }
+        return { uid: d.id, label: x.label || d.id.slice(0, 8), updatedAt: x.updatedAt || 0, data };
+      })));
     },
     /* שמירה מושהית; קריאות רצופות מתאחדות לכתיבה אחת */
     queueSave(uid, data, cb) {
@@ -250,6 +265,8 @@ const Cloud = window.Cloud || { enabled: false };
 let me = null; // המשתמש המחובר (מצב ענן)
 let M = []; // בקשות השוק המשותף (מצב ענן)
 let loading = Cloud.enabled;
+let isAdmin = false; // מנהל (admins/{uid} ב-Firestore): רואה את כל סביבות העבודה, לקריאה בלבד
+let adminData = null; let adminUser = null;
 
 const KEY = 'consulting-suite-v1';
 const $ = (s) => document.querySelector(s);
@@ -342,10 +359,11 @@ function render() {
     return;
   }
   const id = (location.hash || '#dashboard').slice(1);
-  const [, fn] = VIEWS[id] || VIEWS.dashboard;
+  const V = isAdmin ? { ...VIEWS, admin: ['ניהול', adminView] } : VIEWS;
+  const [, fn] = V[id] || V.dashboard;
   const help = '<button class="sm" data-do="tourStart">הדרכה</button>';
   const who = `<span class="who">${Cloud.enabled ? `${esc(me.label)} · <small id="sv"></small> ` : ''}${help}${Cloud.enabled ? ' <button class="sm" data-do="logout">יציאה</button>' : ''}</span>`;
-  $('#nav').innerHTML = Object.entries(VIEWS).map(([k, [t]]) => `<a href="#${k}" class="${k === id ? 'on' : ''}">${t}</a>`).join('') + who;
+  $('#nav').innerHTML = Object.entries(V).map(([k, [t]]) => `<a href="#${k}" class="${k === id ? 'on' : ''}">${t}</a>`).join('') + who;
   $('#view').innerHTML = fn();
   tourRender();
 }
@@ -663,6 +681,9 @@ const ACTIONS = {
     });
   },
   logout: async () => { await Cloud.signOut(); },
+  adminRefresh: () => { adminData = null; render(); },
+  adminOpen: (id) => { adminUser = id; render(); scrollTo(0, 0); },
+  adminBack: () => { adminUser = null; render(); },
   togglePw: () => { // עין: מציג או מסתיר את הסיסמה, והפוקוס נשאר בשדה
     const pw = $('#pw'); const b = $('.eye'); const show = pw.type === 'password';
     pw.type = show ? 'text' : 'password'; b.innerHTML = show ? EYE_OFF : EYE;
@@ -681,6 +702,46 @@ const ACTIONS = {
   }),
   reset: () => ask('למחוק את כל הנתונים?', () => { S = empty(); save(); render(); }),
 };
+/* ---------- ניהול (מנהל בלבד, קריאה בלבד) ---------- */
+const ownerSummary = (w) => {
+  const d = Object.assign(empty(), w.data);
+  const unbilled = d.time.filter((t) => !t.invoice).reduce((x, t) => x + t.hours * t.rate, 0);
+  const openInv = d.invoices.filter((i) => !i.paid).reduce((x, i) => x + i.total, 0);
+  return { d, unbilled, openInv, openTasks: d.tasks.filter((t) => !t.done).length, active: d.projects.filter((p) => p.status === 'פעיל').length };
+};
+function adminView() {
+  if (!adminData) { loadAdmin(); return '<h1>ניהול</h1><div class="empty">טוען את כל סביבות העבודה…</div>'; }
+  if (adminData.error) return `<h1>ניהול</h1><div class="card"><p class="err" style="color:var(--bad)">${esc(adminData.error)}</p><button data-do="adminRefresh">נסה שוב</button></div>`;
+  const list = adminData.list; const cn = (d, id) => by(d.clients, id)?.name || '—'; const pn = (d, id) => by(d.projects, id)?.name || '—';
+  const head = (sub) => `<div class="bar"><h1 style="margin:0">ניהול <span class="tag">קריאה בלבד</span></h1><span>${sub}<button data-do="adminRefresh">רענון</button></span></div>`;
+  if (adminUser) {
+    const w = list.find((x) => x.uid === adminUser); if (!w) { adminUser = null; return adminView(); }
+    const { d } = ownerSummary(w);
+    const tbl = (rows, cols, cells) => rows.length ? `<div class="scroll"><table><tr>${cols.map((c) => `<th>${c}</th>`).join('')}</tr>${rows.map((r) => `<tr>${cells(r).map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</table></div>` : '<div class="empty">אין נתונים</div>';
+    return `${head('<button data-do="adminBack">← כל המשתמשים</button> ')}<h2>${esc(w.label)}</h2>
+    <div class="card"><h2>לקוחות (${d.clients.length})</h2>${tbl(d.clients, ['שם', 'איש קשר', 'טלפון / מייל', 'תחום'], (c) => [esc(c.name), esc(c.contact), esc(`${c.phone || ''} ${c.email || ''}`), esc(c.industry)])}</div>
+    <div class="card"><h2>פרויקטים (${d.projects.length})</h2>${tbl(d.projects, ['פרויקט', 'לקוח', 'סטטוס', 'תקציב', 'שעות'], (p) => [esc(p.name), esc(cn(d, p.client)), esc(p.status), money(p.budget), d.time.filter((t) => t.project === p.id).reduce((x, t) => x + t.hours, 0)])}</div>
+    <div class="card"><h2>משימות (${d.tasks.length})</h2>${tbl(d.tasks, ['משימה', 'פרויקט', 'יעד', 'סטטוס'], (t) => [esc(t.title), esc(pn(d, t.project)), esc(t.due || ''), t.done ? 'הושלמה' : 'פתוחה'])}</div>
+    <div class="card"><h2>שעות (${d.time.length})</h2>${tbl([...d.time].reverse(), ['תאריך', 'פרויקט', 'תיאור', 'שעות', 'סכום', 'חויב'], (t) => [esc(t.date), esc(pn(d, t.project)), esc(t.desc), t.hours, money(t.hours * t.rate), t.invoice ? 'כן' : 'לא'])}</div>
+    <div class="card"><h2>חשבוניות (${d.invoices.length})</h2>${tbl(d.invoices, ['מס׳', 'תאריך', 'לקוח', 'סכום', 'סטטוס'], (i) => [i.no, esc(i.date), esc(cn(d, i.client)), money(i.total), i.paid ? 'שולמה' : 'פתוחה'])}</div>
+    <div class="card"><h2>אבחונים (${d.diagnostics.length})</h2>${tbl(d.diagnostics, ['תאריך', 'לקוח', 'ציון כולל'], (g) => { const sc = scoreOf(g); return [esc(g.date), esc(cn(d, g.client)), Math.round(sc.reduce((x, y) => x + y.pct, 0) / sc.length) + '%']; })}</div>`;
+  }
+  const sums = list.map((w) => ({ w, ...ownerSummary(w) }));
+  const all = sums.flatMap((s) => s.d.projects.map((p) => ({ owner: s.w, d: s.d, p })));
+  const tot = (f) => sums.reduce((x, s) => x + f(s), 0);
+  return `${head('')}<div class="grid" style="margin-top:12px">${stat(list.length, 'משתמשים')}${stat(all.length, 'פרויקטים בסך הכול')}${stat(tot((s) => s.openTasks), 'משימות פתוחות')}${stat(money(tot((s) => s.unbilled)), 'שעות שטרם חויבו')}${stat(money(tot((s) => s.openInv)), 'חשבוניות פתוחות')}</div>
+  <div class="card" style="margin-top:16px"><h2>משתמשים</h2><div class="scroll"><table><tr><th>משתמש</th><th>לקוחות</th><th>פרויקטים פעילים</th><th>משימות פתוחות</th><th>שעות שטרם חויבו</th><th>עודכן</th><th></th></tr>
+  ${sums.map((s) => `<tr><td>${esc(s.w.label)}</td><td>${s.d.clients.length}</td><td>${s.active}</td><td>${s.openTasks}</td><td>${money(s.unbilled)}</td><td>${s.w.updatedAt ? esc(new Date(s.w.updatedAt).toLocaleDateString('he-IL')) : '—'}</td><td><button class="sm pri" data-do="adminOpen" data-id="${esc(s.w.uid)}">פתח הכול</button></td></tr>`).join('')}</table></div></div>
+  <div class="card"><h2>כל הפרויקטים (${all.length})</h2>${all.length ? `<div class="scroll"><table><tr><th>משתמש</th><th>פרויקט</th><th>לקוח</th><th>סטטוס</th><th>תקציב</th><th>שעות</th></tr>
+  ${all.map(({ owner, d, p }) => `<tr><td>${esc(owner.label)}</td><td>${esc(p.name)}</td><td>${esc(cn(d, p.client))}</td><td><span class="tag ${p.status === 'פעיל' ? 'ok' : ''}">${esc(p.status)}</span></td><td>${money(p.budget)}</td><td>${d.time.filter((t) => t.project === p.id).reduce((x, t) => x + t.hours, 0)}</td></tr>`).join('')}</table></div>` : '<div class="empty">אין פרויקטים</div>'}</div>`;
+}
+async function loadAdmin() {
+  if (loadAdmin.busy) return; loadAdmin.busy = true;
+  const r = await Cloud.listWorkspaces(); loadAdmin.busy = false;
+  adminData = r.ok ? { list: r.v.sort((x, y) => y.updatedAt - x.updatedAt) } : { error: r.error };
+  if (curView() === 'admin') render();
+}
+
 /* ---------- הדרכה אינטראקטיבית ---------- */
 /* מתחילה אוטומטית למשתמש חדש (בלי לקוחות ופרויקטים), וניתנת להפעלה מחדש בכפתור "הדרכה".
    שלבי פעולה מתקדמים לבד כשהמשתמש מבצע אותם; אפשר לדלג על כל שלב. הסטטוס נשמר ב-S.settings.tourDone (מסונכרן בענן). */
@@ -755,8 +816,8 @@ $('#dlg').addEventListener('close', () => { if (tour) tourRender(); });
 if (Cloud.enabled) {
   window.addEventListener('pagehide', () => Cloud.flush());
   Cloud.init(async (user) => {
-    if (!user) { me = null; S = empty(); M = []; tour = null; tourAutoTried = false; Cloud.stopMarket(); loading = false; return render(); }
-    me = user; loading = true; render();
+    if (!user) { me = null; isAdmin = false; adminData = null; adminUser = null; S = empty(); M = []; tour = null; tourAutoTried = false; Cloud.stopMarket(); loading = false; return render(); }
+    me = user; loading = true; isAdmin = false; adminData = null; adminUser = null; render();
     try {
       let data = await Cloud.loadWorkspace(user.uid);
       if (!data) { // כניסה ראשונה: מעבירים נתונים שנשמרו מקומית בדפדפן הזה, אם יש
@@ -764,6 +825,7 @@ if (Cloud.enabled) {
         if (Object.keys(data).length) { S = Object.assign(empty(), data); save(); try { localStorage.removeItem(KEY); } catch { /* ignore */ } }
       }
       S = Object.assign(empty(), data);
+      isAdmin = await Cloud.isAdmin(user.uid);
       Cloud.watchWorkspace(user.uid, (remote) => { S = Object.assign(empty(), remote); render(); });
       Cloud.watchRequests(user.uid, (list) => { M = list; if (location.hash === '#market') render(); });
     } catch (e) { note('שגיאה בטעינת הנתונים: ' + (e.message || e)); }
