@@ -58,3 +58,7 @@ svg{max-width:100%;height:auto}
 .nowrap{white-space:nowrap}
 tr.dragging{background:var(--bg);box-shadow:0 4px 14px rgba(0,0,0,.25);position:relative;z-index:2;cursor:grabbing}
 tr.dragging .handle{cursor:grabbing;color:var(--pri)}
+.pwrap{position:relative}.pwrap input{padding-right:44px}
+.eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:none;padding:6px 8px;color:var(--mut);display:flex;align-items:center;border-radius:8px;cursor:pointer}
+.eye:hover,.eye[aria-pressed=true]{color:var(--pri)}
+.eye:focus-visible{outline:2px solid var(--pri)}
