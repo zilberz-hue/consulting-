@@ -601,7 +601,7 @@ const P_OPT = {
   education: ['תואר ראשון', 'תואר שני', 'דוקטורט', 'תעודה מקצועית', 'רישיון / הסמכה רשמית', 'קורסים והשתלמויות'],
   languages: ['עברית', 'אנגלית', 'ערבית', 'רוסית', 'צרפתית', 'ספרדית', 'אמהרית', 'יידיש'],
   audience: ['ילדים', 'נוער', 'מבוגרים', 'זוגות', 'משפחות', 'גיל שלישי', 'נשים', 'גברים', 'ארגונים וחברות', 'עסקים קטנים'],
-  channels: ['אתר', 'אינסטגרם', 'פייסבוק', 'טיקטוק', 'לינקדאין', 'וואטסאפ עסקי', 'פרופיל גוגל עסקי', 'יומן זימונים אונליין', 'ניוזלטר', 'מערכת ניהול לקוחות'],
+  channels: ['אינסטגרם', 'פייסבוק', 'טיקטוק', 'לינקדאין', 'יוטיוב', 'וואטסאפ עסקי', 'פרופיל גוגל עסקי', 'ניוזלטר', 'הרצאות וכנסים', 'קבוצות וקהילות'],
   budget: ['עד 1,000 ₪', '1,000 עד 5,000 ₪', '5,000 עד 20,000 ₪', 'מעל 20,000 ₪'],
   values: ['מקצועיות', 'חופש', 'יציבות', 'השפעה ושליחות', 'צמיחה', 'משפחה', 'יצירתיות', 'יושרה', 'קהילה'],
   energy: ['עבודה עם אנשים', 'כתיבה ותוכן', 'מכירה ושיחות', 'ניהול וארגון', 'טכנולוגיה', 'למידה', 'עבודה לבד', 'הופעה מול קהל'],
@@ -612,6 +612,28 @@ const P_OPT = {
   start: ['מיד', 'תוך שבועיים', 'תוך חודש', 'בעוד יותר מחודש'],
 };
 const P_ROLE_DESC = { founder: 'מקים/ה או מוביל/ה עסק', partner: 'שותף/ה בעסק או במיזם', therapist: 'עובד/ת מול מטופלים' };
+/* רקע טכנולוגי: לכל כלי סולם של 4 שלבים */
+const TECH_LVL = ['אין', 'בתהליך', 'יש, בסיסי', 'בשימוש מלא'];
+const P_TECH = [
+  ['website', 'אתר אינטרנט'], ['landing', 'דף נחיתה'], ['crm', 'מערכת ניהול לקוחות (CRM)'], ['booking', 'יומן זימונים אונליין'],
+  ['payments', 'סליקה ותשלום אונליין'], ['invoices', 'חשבוניות דיגיטליות'], ['whatsapp', 'וואטסאפ עסקי'], ['social', 'רשתות חברתיות'],
+  ['gbp', 'פרופיל גוגל עסקי'], ['newsletter', 'ניוזלטר / רשימת תפוצה'], ['video', 'פגישות וידאו (זום וכו\')'], ['ai', 'כלי בינה מלאכותית (ChatGPT, Claude)'],
+];
+/* האפליקציות והחידושים של טייזון. ⚠️ טיוטה לפי שמות הפרויקטים; לעדכן לפי הרשימה הרשמית */
+const APP_LVL = ['לא מכיר/ה', 'מכיר/ה', 'למד/ה', 'משתמש/ת קבוע'];
+const TIZON_APPS = [
+  ['site', 'אתר TizonHealth', 'האתר המרכזי והתכנים'], ['store', 'חנות TizonHealth', 'מוצרים והזמנות אונליין'],
+  ['academy', 'Tizon Academy', 'קורסים והכשרות'], ['fit', 'TizonFit', 'אפליקציית כושר ותנועה'],
+  ['food', 'מעקב תזונה', 'יומן אכילה ומעקב'], ['diag', 'אבחון Tizon', 'שאלוני אבחון לפונים'],
+  ['ai', 'TizonAI', 'עוזר בינה מלאכותית'], ['practice', 'Tizon Practice', 'ניהול קליניקה'],
+  ['workflow', 'Tizon Workflow', 'תוכנית עבודה וניהול תהליכים'], ['finance', 'TizonFinance', 'כספים ותמחור'],
+  ['marketing', 'TizonMarketing', 'שיווק ותוכן'], ['affiliates', 'תוכנית השותפים', 'הפניות ועמלות'],
+  ['agreements', 'הסכמים דיגיטליים', 'הסכמים ו-NDA לחתימה'], ['calendar', 'יומן Tizon', 'זימון פגישות'],
+  ['consult', 'טייזון – היועץ העסקי', 'האפליקציה הזו: משימות, אפיון ותוכנית'],
+];
+const techLvl = (a, k) => (a['tech_' + k] === undefined || a['tech_' + k] === '' ? null : num(a['tech_' + k])); // null = לא נענה
+const appLvl = (a, k) => (a['app_' + k] === undefined || a['app_' + k] === '' ? null : num(a['app_' + k]));
+const digitalScore = (a) => { const v = P_TECH.map(([k]) => techLvl(a, k)).filter((x) => x !== null); return v.length ? Math.round((v.reduce((s, x) => s + x, 0) / (v.length * 3)) * 100) : null; };
 const P_EXP = ['עד שנה', '1 עד 3 שנים', '3 עד 7 שנים', '7 עד 15 שנים', '15 עד 20 שנים', 'מעל 20 שנה'];
 const P_START_DAYS = { 'מיד': 0, 'תוך שבועיים': 14, 'תוך חודש': 30, 'בעוד יותר מחודש': 45 };
 const planBase = (p) => p.startAt || p.createdAt; // תאריך תחילת התוכנית
@@ -733,9 +755,27 @@ function buildProfile(a, base = Date.now()) {
   const aud = a.audience || []; const ch = a.channels || []; const spec = [...(a.specialties || []), ...(a.specialtiesOther ? [a.specialtiesOther] : [])];
   if (aud.length) add({ p: 2, ph: 3, area: 'שיווק', t: `להתאים את המסר והערוצים לקהל: ${aud.slice(0, 3).join(', ')}`, why: aud.length > 3 ? `בחרת ${aud.length} קהלים. כדאי להתחיל בשניים או שלושה.` : 'מסר שמדבר לקהל מסוים עובד טוב יותר ממסר כללי.' });
   if (spec.length) add({ p: 2, ph: 2, area: 'שיווק', t: `לנסח הצעה ייחודית סביב ההתמחות: ${spec.slice(0, 2).join(' ו')}`, why: 'התמחות ברורה מקלה על הפניות ועל המחיר.' });
-  if (!ch.some((c) => ['אתר', 'אינסטגרם', 'פייסבוק', 'טיקטוק', 'לינקדאין', 'פרופיל גוגל עסקי'].includes(c))) add({ p: 1, ph: 2, area: 'שיווק', t: 'להקים נוכחות בסיסית: פרופיל גוגל עסקי ועמוד ברשת אחת', why: 'בלי נוכחות דיגיטלית קשה למצוא אותך.' });
-  else if (ch.length >= 5) add({ p: 2, ph: 2, area: 'שיווק', t: 'לבחור שני ערוצים להתמקד בהם ולמדוד מה מביא פניות', why: `את/ה פעיל/ה ב-${ch.length} ערוצים. פיזור מוריד את התוצאה בכל אחד.` });
-  if (!ch.includes('יומן זימונים אונליין') && !ch.includes('מערכת ניהול לקוחות')) add({ p: 2, ph: 2, area: 'כלים', t: 'להפעיל יומן זימונים אונליין וניהול לקוחות (אפשר באפליקציה הזו)', why: 'חוסך שיחות תיאום ומאפשר מעקב.' });
+  // רקע טכנולוגי (ואם לא נענה: לפי הערוצים, כמו באפיונים ישנים)
+  const T = (k) => techLvl(a, k); const web = T('website') ?? (ch.includes('אתר') ? 2 : null);
+  if (web === 0 && !(T('landing') >= 2)) add({ p: 1, ph: 2, area: 'דיגיטל', t: 'להקים אתר או דף נחיתה בסיסי: מי את/ה, למי זה מתאים ואיך קובעים פגישה', why: 'סימנת שאין אתר. זה המקום הראשון שבו בודקים אותך.' });
+  else if (web === 1) add({ p: 1, ph: 2, area: 'דיגיטל', t: 'להשלים ולהעלות את האתר לאוויר, גם אם לא מושלם', why: 'האתר בתהליך. עדיף אתר פשוט באוויר מאתר מושלם בבנייה.' });
+  else if (web === 2) add({ p: 3, ph: 3, area: 'דיגיטל', t: 'לעדכן את האתר: המלצות, תמונה עדכנית וכפתור לקביעת פגישה', why: 'יש אתר בסיסי. עדכון קטן משפר המרה.' });
+  if (web === null && !ch.some((c) => ['אינסטגרם', 'פייסבוק', 'טיקטוק', 'לינקדאין', 'פרופיל גוגל עסקי', 'יוטיוב'].includes(c)) && T('gbp') === null) add({ p: 1, ph: 2, area: 'שיווק', t: 'להקים נוכחות בסיסית: פרופיל גוגל עסקי ועמוד ברשת אחת', why: 'בלי נוכחות דיגיטלית קשה למצוא אותך.' });
+  if (T('gbp') === 0) add({ p: 2, ph: 2, area: 'דיגיטל', t: 'לפתוח פרופיל גוגל עסקי עם שעות, תמונות וקישור לקביעת פגישה', why: 'חינמי, ומופיע בחיפוש ובמפות.' });
+  if (ch.length >= 5) add({ p: 2, ph: 2, area: 'שיווק', t: 'לבחור שני ערוצים להתמקד בהם ולמדוד מה מביא פניות', why: `את/ה פעיל/ה ב-${ch.length} ערוצים. פיזור מוריד את התוצאה בכל אחד.` });
+  const crm = T('crm') ?? (ch.includes('מערכת ניהול לקוחות') ? 2 : null); const book = T('booking') ?? (ch.includes('יומן זימונים אונליין') ? 2 : null);
+  if (crm !== null && crm <= 1) add({ p: 2, ph: 1, area: 'דיגיטל', t: 'להעביר את רשימת הלקוחות למערכת אחת (אפשר בלשונית "לקוחות" באפליקציה הזו)', why: crm === 0 ? 'אין היום מערכת לניהול לקוחות.' : 'ניהול הלקוחות עוד בתהליך.' });
+  if (book !== null && book <= 1) add({ p: 2, ph: 2, area: 'דיגיטל', t: 'להפעיל יומן זימונים אונליין, כדי שלקוחות יקבעו לבד', why: 'חוסך שיחות תיאום ופגישות שנופלות.' });
+  if (crm === null && book === null) add({ p: 2, ph: 2, area: 'כלים', t: 'להפעיל יומן זימונים אונליין וניהול לקוחות (אפשר באפליקציה הזו)', why: 'חוסך שיחות תיאום ומאפשר מעקב.' });
+  if (T('payments') === 0) add({ p: 2, ph: 2, area: 'דיגיטל', t: 'להפעיל קישור תשלום או סליקה אונליין', why: 'תשלום מראש מקטין ביטולים ומזרז גבייה.' });
+  if (T('invoices') === 0) add({ p: 3, ph: 2, area: 'דיגיטל', t: 'לעבור לחשבוניות דיגיטליות אוטומטיות', why: 'חוסך זמן בסוף כל חודש.' });
+  if (T('ai') !== null && T('ai') <= 1) add({ p: 3, ph: 3, area: 'דיגיטל', t: 'להתחיל להשתמש בכלי AI לכתיבת תוכן, סיכומי פגישות ותשובות ללקוחות', why: 'חוסך שעות בשבוע במשימות חוזרות.' });
+  // אפליקציות טייזון: מה להכיר ומה להטמיע
+  const notKnown = TIZON_APPS.filter(([k]) => appLvl(a, k) !== null && appLvl(a, k) <= 1).map((x) => x[1]);
+  const learnedNotUsed = TIZON_APPS.filter(([k]) => appLvl(a, k) === 2).map((x) => x[1]);
+  if (notKnown.length) add({ p: 2, ph: 1, area: 'טייזון', t: `הדרכת היכרות עם כלי טייזון: ${notKnown.slice(0, 4).join(', ')}${notKnown.length > 4 ? ` ועוד ${notKnown.length - 4}` : ''}`, why: 'כלים שעוד לא נלמדו, וחלקם יכולים לחסוך עבודה מהיום הראשון.' });
+  if (learnedNotUsed.length) add({ p: 2, ph: 2, area: 'טייזון', t: `להטמיע בשימוש קבוע: ${learnedNotUsed.slice(0, 4).join(', ')}`, why: 'נלמדו אבל עוד לא בשימוש. שגרה קבועה הופכת אותם לכלי עבודה.' });
+  if (num(a.techComfort) && num(a.techComfort) <= 2 && (notKnown.length || (web !== null && web <= 1))) add({ p: 1, ph: 1, area: 'דיגיטל', t: 'פגישת הדרכה אישית על הכלים הדיגיטליים, צעד אחר צעד', why: `נוחות עם טכנולוגיה: ${a.techComfort} מתוך 5. כדאי ללוות ולא לשלוח לבד.` });
   const langs = [...(a.languages || []), ...(a.languagesOther ? [a.languagesOther] : [])].filter((l) => l !== 'עברית');
   if (langs.length) add({ p: 3, ph: 3, area: 'שיווק', t: `לפנות גם לקהל דובר ${langs.slice(0, 2).join(' ו')}: פרופיל או עמוד בשפה הזו`, why: 'שפה נוספת היא יתרון תחרותי.' });
   // חסמים
@@ -766,6 +806,8 @@ function buildProfile(a, base = Date.now()) {
   if ((a.energyTake || []).length) notes.push(`מה שלוקח אנרגיה (${a.energyTake.join(', ')}): לקצר, לתזמן ${times.length ? `ל${times[0]}` : 'לזמן הכי טוב שלך'}, או להאציל.`);
   if ((a.energyGive || []).length) notes.push(`מה שנותן אנרגיה (${a.energyGive.join(', ')}): נבנה סביבו את הפעולות המרכזיות.`);
   if ((a.learning || []).length) notes.push(`חומרי למידה ותמיכה יינתנו בעיקר ב${a.learning.join(' / ')}.`);
+  const ds = digitalScore(a); if (ds !== null) notes.push(`בשלות דיגיטלית: ${ds}% (${ds < 34 ? 'מתחיל/ה' : ds < 67 ? 'בסיסי' : 'מתקדם/ת'}). התוכנית מתחילה מהכלים החסרים ביותר.`);
+  const using = TIZON_APPS.filter(([k]) => appLvl(a, k) === 3).map((x) => x[1]); if (using.length) notes.push(`כלי טייזון שכבר בשימוש קבוע: ${using.join(', ')}. נבנה עליהם.`);
   if (times.length) notes.push(`זמני עבודה מועדפים: ${times.join(', ')}. פגישות קבועות ייקבעו בזמנים האלה.`);
   const startDays = P_START_DAYS[a.start] || 0;
   const kpis = [inc1 ? `הכנסה חודשית: ${money(inc0)} ← ${money(inc1)}` : '', num(a.clientsTarget) ? `לקוחות / מטופלים חדשים בחודש: ${num(a.clientsTarget)}` : '', num(a.hoursTarget) ? `שעות עבודה בשבוע: ${num(a.hoursTarget)}` : '', a.role === 'therapist' && num(a.target) ? `מטופלים בשבוע: ${num(a.load)} ← ${num(a.target)}` : ''].filter(Boolean);
@@ -774,7 +816,8 @@ function buildProfile(a, base = Date.now()) {
 
 let wiz = null; // { step, data, editId } אשף האפיון (בזיכרון בלבד עד השמירה)
 let profOpen = null; // מזהה אפיון פתוח לצפייה
-const WIZ_STEPS = ['מי אתה', 'רקע מקצועי', 'עסק וקהל', 'מטרות ויעדים', 'חוזקות', 'סגנון ואישיות', 'חסמים ותמיכה', 'שאלות לתפקיד'];
+const WIZ = [['me', 'מי אתה'], ['bg', 'רקע מקצועי'], ['biz', 'עסק וקהל'], ['tech', 'רקע טכנולוגי'], ['goals', 'מטרות ויעדים'], ['skills', 'חוזקות'], ['style', 'סגנון ואישיות'], ['barriers', 'חסמים ותמיכה'], ['role', 'שאלות לתפקיד']];
+const WIZ_STEPS = WIZ.map((x) => x[1]);
 function profileView() {
   if (wiz?.public) wiz = null; // חזרה מתצוגה מקדימה של השאלון הציבורי
   if (wiz) return wizView();
@@ -790,7 +833,7 @@ function profileView() {
 }
 const wv = (k, d = '') => esc(wiz.data[k] ?? d);
 function wizView() {
-  const d = wiz.data; const s = wiz.step; const last = s === WIZ_STEPS.length - 1;
+  const d = wiz.data; const s = wiz.step; const last = s === WIZ_STEPS.length - 1; const key = WIZ[s][0];
   const sel = (k, opts, ph = '— בחר —') => `<select data-w="${k}"><option value="">${ph}</option>${opts.map((o) => `<option ${d[k] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   /* תגיות לבחירה מרובה; max = מספר מרבי (0 = ללא הגבלה) */
   const chips = (k, opts, max = 0) => `<div class="chips" role="group">${opts.map((o) => `<label class="chip"><input type="checkbox" data-wg="${k}" ${max ? `data-max="${max}"` : ''} value="${esc(o)}" ${(d[k] || []).includes(o) ? 'checked' : ''}> ${esc(o)}</label>`).join('')}</div><p class="err hint" id="hint_${k}" role="alert"></p>`;
@@ -799,46 +842,52 @@ function wizView() {
   const sec = (title, html, sub = '') => `<fieldset class="wsec"><legend>${title}${sub ? ` <span class="muted lsub">${sub}</span>` : ''}</legend>${html}</fieldset>`;
   const lab = (t, sub = '') => `<label>${t}${sub ? ` <span class="muted">${sub}</span>` : ''}</label>`;
   let body = '';
-  if (s === 0) body = sec('פרטים אישיים', inp('name', 'שם מלא', 'text', 'autocomplete="off" placeholder="לדוגמה: נועה כהן"'))
+  if (key === 'me') body = sec('פרטים אישיים', inp('name', 'שם מלא', 'text', 'autocomplete="off" placeholder="לדוגמה: נועה כהן"'))
     + sec('מה התפקיד שלך?', `<div class="rolecards" role="radiogroup" aria-label="תפקיד">${Object.entries(P_ROLES).map(([k, v]) => `<label class="rolecard ${d.role === k ? 'on' : ''}"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}><span class="rc-t">${v}</span><span class="rc-d">${P_ROLE_DESC[k]}</span></label>`).join('')}</div>`)
     + sec('פרטי קשר', `<div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off" placeholder="050-0000000"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off" placeholder="name@example.com"')}</div>${inp('city', 'עיר / אזור', 'text', 'placeholder="לדוגמה: תל אביב"')}`)
     + sec('ניסיון וזמינות', `<div class="grid2"><div class="fld">${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div>${inp('hours', 'שעות בשבוע לבנייה ולצמיחה', 'number', 'min="0" max="80"')}</div>`);
   const many = '(אפשר לבחור כמה)';
-  if (s === 1) body = sec('תחומי התמחות', chips('specialties', P_OPT.specialties) + inp('specialtiesOther', 'תחום נוסף שלא ברשימה'), many)
+  if (key === 'bg') body = sec('תחומי התמחות', chips('specialties', P_OPT.specialties) + inp('specialtiesOther', 'תחום נוסף שלא ברשימה'), many)
     + sec('השכלה והסמכות', chips('education', P_OPT.education) + inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)'), many)
     + sec('שפות עבודה', chips('languages', P_OPT.languages) + inp('languagesOther', 'שפה נוספת'), many);
-  if (s === 2) body = sec('קהל יעד', chips('audience', P_OPT.audience), many)
+  if (key === 'biz') body = sec('קהל יעד', chips('audience', P_OPT.audience), many)
     + sec('ערוצים וכלים שכבר בשימוש', chips('channels', P_OPT.channels), many)
     + sec('מספרים', `<div class="grid3">${inp('incomeNow', 'הכנסה חודשית היום (₪)', 'number', 'min="0" placeholder="0"')}${inp('incomeTarget', 'יעד הכנסה חודשית (₪)', 'number', 'min="0" placeholder="0"')}${inp('price', 'מחיר לפגישה / שירות (₪)', 'number', 'min="0" placeholder="0"')}</div>`, '(לא חובה, אבל עוזר לחשב את התוכנית)')
     + sec('תקציב להשקעה', `<div class="fld">${lab('ברבעון הקרוב')}${sel('budget', P_OPT.budget)}</div>`);
-  if (s === 3) body = sec('מטרות מרכזיות', `<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" data-max="6" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>`, '(עד שש)')
+  /* שורה עם סולם שלבים (כפתורי בחירה) */
+  const seg = (field, levels, title, desc = '') => `<div class="techrow"><div class="tr-name"><b>${title}</b>${desc ? `<span class="muted">${desc}</span>` : ''}</div><div class="seg" role="radiogroup" aria-label="${esc(title)}">${levels.map((l, i) => `<label class="${String(d[field]) === String(i) ? 'on' : ''}"><input type="radio" name="${field}" data-w="${field}" value="${i}" ${String(d[field]) === String(i) ? 'checked' : ''}>${l}</label>`).join('')}</div></div>`;
+  if (key === 'tech') body = sec('כלים ותשתית דיגיטלית', `<p class="muted" style="margin:0 0 6px">לכל שורה: באיזה שלב זה אצלך היום? אפשר לדלג על מה שלא רלוונטי.</p>${P_TECH.map(([k, t]) => seg('tech_' + k, TECH_LVL, t)).join('')}`)
+    + sec('האפליקציות והחידושים של טייזון', `${TIZON_APPS.map(([k, t, dsc]) => seg('app_' + k, APP_LVL, t, dsc)).join('')}`, '(מה כבר מוכר לך?)')
+    + sec('נוחות עם טכנולוגיה', `<div class="q"><span>עד כמה נוח לך עם כלים דיגיטליים? (1 עד 5)</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="techComfort" value="${d.techComfort || 3}" aria-label="נוחות עם טכנולוגיה"><output>${d.techComfort || 3}</output></span></div>`);
+  if (key === 'goals') body = sec('מטרות מרכזיות', `<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" data-max="6" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>`, '(עד שש)')
     + sec('איך נראית הצלחה בעוד 90 יום?', tx('success', 'במילים שלך'))
     + sec('יעדים במספרים', `<div class="grid2">${inp('clientsTarget', 'לקוחות / מטופלים חדשים בחודש', 'number', 'min="0" placeholder="0"')}${inp('hoursTarget', 'שעות עבודה בשבוע', 'number', 'min="0" max="80" placeholder="0"')}</div>`, '(לא חובה)');
-  if (s === 4) body = sec('דירוג עצמי', `<p class="muted" style="margin:0 0 6px">מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`);
-  if (s === 5) body = sec('איך את/ה עובד/ת', `<div class="grid3"><div class="fld">${lab('קצב עבודה')}${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}</div><div class="fld">${lab('קבלת החלטות')}${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}</div><div class="fld">${lab('תקשורת מועדפת')}${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}</div></div>`)
+  if (key === 'skills') body = sec('דירוג עצמי', `<p class="muted" style="margin:0 0 6px">מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`);
+  if (key === 'style') body = sec('איך את/ה עובד/ת', `<div class="grid3"><div class="fld">${lab('קצב עבודה')}${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}</div><div class="fld">${lab('קבלת החלטות')}${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}</div><div class="fld">${lab('תקשורת מועדפת')}${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}</div></div>`)
     + sec('ערכים מובילים', chips('values', P_OPT.values, 3), '(עד שלושה)')
     + sec('אנרגיה', `${lab('מה נותן לך אנרגיה?')}${chips('energyGive', P_OPT.energy)}${lab('מה לוקח ממך אנרגיה?')}${chips('energyTake', P_OPT.energy)}`, many)
     + sec('זמנים ולמידה', `${lab('זמני עבודה מועדפים')}${chips('times', P_OPT.times)}${lab('איך הכי נוח לך ללמוד?')}${chips('learning', P_OPT.learning)}`, many);
-  if (s === 6) body = sec('מה מעכב אותך היום?', chips('barriers', P_OPT.barriers) + tx('obstacle', 'במילים שלך'), many)
+  if (key === 'barriers') body = sec('מה מעכב אותך היום?', chips('barriers', P_OPT.barriers) + tx('obstacle', 'במילים שלך'), many)
     + sec('איזו תמיכה היית רוצה מאיתנו?', chips('support', P_OPT.support), many)
     + sec('מוכנות והתחלה', `<div class="q"><span>עד כמה את/ה מוכן/ה להתחיל עכשיו? (1 עד 10)</span><span class="rate"><input type="range" min="1" max="10" step="1" data-w="readiness" value="${d.readiness || 7}" aria-label="מוכנות"><output>${d.readiness || 7}</output></span></div><div class="fld" style="margin-top:8px">${lab('מתי אפשר להתחיל?')}${sel('start', P_OPT.start)}</div>`);
-  if (s === 7) {
+  if (key === 'role') {
     P_ROLE_Q[d.role].forEach((q) => { if (q.type === 'number' && d[q.k] === undefined) d[q.k] = String(q.def ?? 0); });
     const f = (q) => (q.opts ? `<div class="fld">${lab(q.label)}${sel(q.k, q.opts)}</div>` : inp(q.k, q.label, q.type || 'text', q.type === 'number' ? 'min="0"' : ''));
     const qs = P_ROLE_Q[d.role]; const nums = qs.filter((q) => q.type === 'number'); const rest = qs.filter((q) => q.type !== 'number');
     body = sec(`שאלות ל${P_ROLES[d.role]}`, `${rest.map(f).join('')}${nums.length ? `<div class="grid2">${nums.map(f).join('')}</div>` : ''}`, '(כמעט סיימנו)');
   }
-  if (s === 0 && wiz.public) body += '<input class="hp" data-w="website" tabindex="-1" autocomplete="off" aria-hidden="true" placeholder="website">'; // מלכודת לבוטים
+  if (key === 'me' && wiz.public) body += '<input class="hp" data-w="website" tabindex="-1" autocomplete="off" aria-hidden="true" placeholder="website">'; // מלכודת לבוטים
   const h1 = wiz.public ? esc(pub.form?.title || 'שאלון היכרות') : wiz.editId ? 'עריכת אפיון' : 'אפיון אישי';
-  return `<div class="wizwrap"><h1>${h1}</h1>${wiz.public && s === 0 ? '<p class="muted">שאלון היכרות קצר (כ-7 דקות). התשובות יעזרו לנו להכין לך תוכנית עבודה אישית. בסוף תועבר/י לקביעת פגישה.</p>' : ''}<div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
+  return `<div class="wizwrap"><h1>${h1}</h1>${wiz.public && key === 'me' ? '<p class="muted">שאלון היכרות קצר (כ-7 דקות). התשובות יעזרו לנו להכין לך תוכנית עבודה אישית. בסוף תועבר/י לקביעת פגישה.</p>' : ''}<div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
   ${body}<p id="wizErr" class="err" role="alert"></p><div class="row"><button class="pri" data-do="wizNext">${last ? (wiz.public ? 'שליחה' : 'צור תוכנית') : 'הבא'}</button>${s > 0 ? '<button data-do="wizBack">הקודם</button>' : ''}${wiz.public ? '' : '<button class="tour-x" data-do="wizCancel">ביטול</button>'}</div></div></div>`;
 }
 function wizCheck() {
   const d = wiz.data; const s = wiz.step;
-  if (s === 0 && !(d.name || '').trim()) return 'יש להזין שם';
-  if (s === 0 && !d.role) return 'יש לבחור תפקיד';
-  if (s === 0 && d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) return 'כתובת המייל אינה תקינה';
-  if (s === 3 && !(d.goals || []).length) return 'יש לבחור לפחות מטרה אחת';
+  const key = WIZ[s][0];
+  if (key === 'me' && !(d.name || '').trim()) return 'יש להזין שם';
+  if (key === 'me' && !d.role) return 'יש לבחור תפקיד';
+  if (key === 'me' && d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) return 'כתובת המייל אינה תקינה';
+  if (key === 'goals' && !(d.goals || []).length) return 'יש לבחור לפחות מטרה אחת';
   return '';
 }
 document.addEventListener('input', (ev) => {
@@ -851,6 +900,7 @@ document.addEventListener('input', (ev) => {
   } else if (t.dataset.w) {
     wiz.data[t.dataset.w] = t.value; if (t.type === 'range') t.nextElementSibling.textContent = t.value;
     if (t.name === 'role') document.querySelectorAll('.rolecard').forEach((c) => c.classList.toggle('on', c.contains(t)));
+    if (t.type === 'radio' && t.closest('.seg')) t.closest('.seg').querySelectorAll('label').forEach((l) => l.classList.toggle('on', l.contains(t)));
   }
 });
 function profileDetail(p) {
@@ -861,6 +911,7 @@ function profileDetail(p) {
   return `<div class="bar"><h1 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span></h1><span><button data-do="profBack">← כל האפיונים</button> <button data-do="profEdit" data-id="${p.id}">עריכת אפיון</button></span></div>
   <div class="card"><h2>${esc(p.archetype)}</h2><p>החוזקה הבולטת: <b>${esc(P_SKILLS[p.top])}</b>. תחומים לחיזוק: <b>${p.low.map((k) => esc(P_SKILLS[k])).join(', ')}</b>.</p>
   ${sk.map((s) => `<div style="margin:8px 0"><div class="bar" style="margin:0"><span>${esc(P_SKILLS[s.k])}</span><b>${s.v}/5</b></div><div class="meter"><i style="width:${s.v * 20}%;background:${s.v <= 2 ? 'var(--warn)' : 'var(--ok)'}"></i></div></div>`).join('')}
+  ${digitalScore(p.answers) !== null ? `<div style="margin:8px 0"><div class="bar" style="margin:0"><span>בשלות דיגיטלית</span><b>${digitalScore(p.answers)}%</b></div><div class="meter"><i style="width:${digitalScore(p.answers)}%;background:var(--pri)"></i></div></div>` : ''}
   ${(p.answers.goals || []).length ? `<p style="margin-top:12px">מטרות: ${(p.answers.goals || []).map((g) => `<span class="tag">${esc(P_GOALS[g])}</span>`).join(' ')}</p>` : ''}
   ${p.answers.success ? `<p>הצלחה בעוד 90 יום, במילים שלך: <i>${esc(p.answers.success)}</i></p>` : ''}</div>
   ${(p.kpis || []).length ? `<div class="card"><h2>מדדי הצלחה ל-90 יום</h2><div class="grid">${p.kpis.map((k) => `<div class="stat"><b style="font-size:17px">${esc(k.split(': ')[1])}</b><span>${esc(k.split(': ')[0])}</span></div>`).join('')}</div></div>` : ''}
@@ -877,7 +928,7 @@ function profileDetail(p) {
   ${row('התמחות', tags([...(A.specialties || []), A.specialtiesOther]))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
   ${row('קהל יעד', tags(A.audience))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
   ${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
-  ${row('חסמים', tags(A.barriers))}${row('תמיכה מבוקשת', tags(A.support))}${row('מוכנות', A.readiness ? esc(A.readiness) + ' / 10' : '')}${row('התחלה', esc(A.start || ''))}</details>`;
+  ${row('כלים דיגיטליים', P_TECH.filter(([k]) => techLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${techLvl(A, k) >= 2 ? 'ok' : techLvl(A, k) === 0 ? 'bad' : 'warn'}">${esc(t)}: ${esc(TECH_LVL[techLvl(A, k)])}</span>`).join(' '))}${row('אפליקציות טייזון', TIZON_APPS.filter(([k]) => appLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${appLvl(A, k) >= 2 ? 'ok' : ''}">${esc(t)}: ${esc(APP_LVL[appLvl(A, k)])}</span>`).join(' '))}${row('נוחות עם טכנולוגיה', A.techComfort ? esc(A.techComfort) + ' / 5' : '')}${row('חסמים', tags(A.barriers))}${row('תמיכה מבוקשת', tags(A.support))}${row('מוכנות', A.readiness ? esc(A.readiness) + ' / 10' : '')}${row('התחלה', esc(A.start || ''))}</details>`;
 }
 
 

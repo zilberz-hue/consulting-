@@ -114,3 +114,14 @@ a.btn{display:inline-block;text-decoration:none}a.btn.pri{background:var(--pri);
 .wsec legend .lsub{font-weight:400;font-size:13px}
 .wsec .chips{margin-top:0}.wsec .fld+.fld{margin-top:0}
 .wsec .q:last-child{border-bottom:0}
+.techrow{display:flex;gap:10px 16px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:8px 0;border-bottom:1px dashed var(--line)}
+.techrow:last-child{border-bottom:0}
+.tr-name{display:flex;flex-direction:column;min-width:0;flex:1 1 180px}.tr-name .muted{font-size:13px}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+.seg label{margin:0;padding:6px 10px;font-size:13px;color:var(--ink);cursor:pointer;border-inline-start:1px solid var(--line);white-space:nowrap}
+.seg label:first-child{border-inline-start:0}
+.seg label input{position:absolute;opacity:0;pointer-events:none}
+.seg label.on{background:var(--pri);color:var(--on-pri)}
+.seg label:focus-within{outline:2px solid var(--pri);outline-offset:-2px}
+@media(max-width:520px){.seg{width:100%}.seg label{flex:1;text-align:center;padding:6px 4px}}
+.seg label input,.rolecard input{width:1px;height:1px;margin:0;padding:0}
