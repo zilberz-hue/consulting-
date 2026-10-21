@@ -611,6 +611,7 @@ const P_OPT = {
   support: ['ליווי שבועי', 'סדנאות', 'תבניות ומסמכים', 'עזרה בשיווק', 'עזרה בטכנולוגיה', 'נטוורקינג וחיבורים'],
   start: ['מיד', 'תוך שבועיים', 'תוך חודש', 'בעוד יותר מחודש'],
 };
+const P_ROLE_DESC = { founder: 'מקים/ה או מוביל/ה עסק', partner: 'שותף/ה בעסק או במיזם', therapist: 'עובד/ת מול מטופלים' };
 const P_EXP = ['עד שנה', '1 עד 3 שנים', '3 עד 7 שנים', '7 עד 15 שנים', '15 עד 20 שנים', 'מעל 20 שנה'];
 const P_START_DAYS = { 'מיד': 0, 'תוך שבועיים': 14, 'תוך חודש': 30, 'בעוד יותר מחודש': 45 };
 const planBase = (p) => p.startAt || p.createdAt; // תאריך תחילת התוכנית
@@ -793,15 +794,15 @@ function wizView() {
   const sel = (k, opts, ph = '— בחר —') => `<select data-w="${k}"><option value="">${ph}</option>${opts.map((o) => `<option ${d[k] === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
   /* תגיות לבחירה מרובה; max = מספר מרבי (0 = ללא הגבלה) */
   const chips = (k, opts, max = 0) => `<div class="chips" role="group">${opts.map((o) => `<label class="chip"><input type="checkbox" data-wg="${k}" ${max ? `data-max="${max}"` : ''} value="${esc(o)}" ${(d[k] || []).includes(o) ? 'checked' : ''}> ${esc(o)}</label>`).join('')}</div><p class="err hint" id="hint_${k}" role="alert"></p>`;
-  const inp = (k, label, type = 'text', extra = '') => `<label for="w_${k}">${label}</label><input id="w_${k}" data-w="${k}" type="${type}" value="${wv(k)}" ${extra}>`;
-  const tx = (k, label) => `<label for="w_${k}">${label}</label><textarea id="w_${k}" data-w="${k}">${wv(k)}</textarea>`;
+  const inp = (k, label, type = 'text', extra = '') => `<div class="fld"><label for="w_${k}">${label}</label><input id="w_${k}" data-w="${k}" type="${type}" value="${wv(k)}" ${extra}></div>`;
+  const tx = (k, label) => `<div class="fld"><label for="w_${k}">${label}</label><textarea id="w_${k}" data-w="${k}">${wv(k)}</textarea></div>`;
+  const sec = (title, html) => `<fieldset class="wsec"><legend>${title}</legend>${html}</fieldset>`;
   const lab = (t, sub = '') => `<label>${t}${sub ? ` <span class="muted">${sub}</span>` : ''}</label>`;
   let body = '';
-  if (s === 0) body = `${inp('name', 'שם', 'text', 'autocomplete="off"')}
-    ${lab('תפקיד')}<div class="chips">${Object.entries(P_ROLES).map(([k, v]) => `<label class="chip"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}> ${v}</label>`).join('')}</div>
-    <div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off"')}</div>
-    <div class="grid2">${inp('city', 'עיר / אזור')}<div>${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div></div>
-    ${inp('hours', 'כמה שעות בשבוע אפשר להקדיש לבנייה ולצמיחה?', 'number', 'min="0" max="80"')}`;
+  if (s === 0) body = sec('פרטים אישיים', inp('name', 'שם מלא', 'text', 'autocomplete="off" placeholder="לדוגמה: נועה כהן"'))
+    + sec('מה התפקיד שלך?', `<div class="rolecards" role="radiogroup" aria-label="תפקיד">${Object.entries(P_ROLES).map(([k, v]) => `<label class="rolecard ${d.role === k ? 'on' : ''}"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}><span class="rc-t">${v}</span><span class="rc-d">${P_ROLE_DESC[k]}</span></label>`).join('')}</div>`)
+    + sec('פרטי קשר', `<div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off" placeholder="050-0000000"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off" placeholder="name@example.com"')}</div>${inp('city', 'עיר / אזור', 'text', 'placeholder="לדוגמה: תל אביב"')}`)
+    + sec('ניסיון וזמינות', `<div class="grid2"><div class="fld">${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div>${inp('hours', 'שעות בשבוע לבנייה ולצמיחה', 'number', 'min="0" max="80"')}</div>`);
   if (s === 1) body = `${lab('תחומי התמחות', '(אפשר כמה)')}${chips('specialties', P_OPT.specialties)}${inp('specialtiesOther', 'תחום נוסף שלא ברשימה')}
     ${lab('השכלה והסמכות', '(אפשר כמה)')}${chips('education', P_OPT.education)}${inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)')}
     ${lab('שפות עבודה', '(אפשר כמה)')}${chips('languages', P_OPT.languages)}${inp('languagesOther', 'שפה נוספת')}`;
@@ -829,8 +830,8 @@ function wizView() {
   }
   if (s === 0 && wiz.public) body += '<input class="hp" data-w="website" tabindex="-1" autocomplete="off" aria-hidden="true" placeholder="website">'; // מלכודת לבוטים
   const h1 = wiz.public ? esc(pub.form?.title || 'שאלון היכרות') : wiz.editId ? 'עריכת אפיון' : 'אפיון אישי';
-  return `<h1>${h1}</h1><div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
-  ${body}<p id="wizErr" class="err" role="alert"></p><div class="row"><button class="pri" data-do="wizNext">${last ? (wiz.public ? 'שליחה' : 'צור תוכנית') : 'הבא'}</button>${s > 0 ? '<button data-do="wizBack">הקודם</button>' : ''}${wiz.public ? '' : '<button class="tour-x" data-do="wizCancel">ביטול</button>'}</div></div>`;
+  return `<div class="wizwrap"><h1>${h1}</h1>${wiz.public && s === 0 ? '<p class="muted">שאלון היכרות קצר (כ-7 דקות). התשובות יעזרו לנו להכין לך תוכנית עבודה אישית. בסוף תועבר/י לקביעת פגישה.</p>' : ''}<div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
+  ${body}<p id="wizErr" class="err" role="alert"></p><div class="row"><button class="pri" data-do="wizNext">${last ? (wiz.public ? 'שליחה' : 'צור תוכנית') : 'הבא'}</button>${s > 0 ? '<button data-do="wizBack">הקודם</button>' : ''}${wiz.public ? '' : '<button class="tour-x" data-do="wizCancel">ביטול</button>'}</div></div></div>`;
 }
 function wizCheck() {
   const d = wiz.data; const s = wiz.step;
@@ -847,7 +848,10 @@ document.addEventListener('input', (ev) => {
     const cur = new Set(wiz.data[k] || []);
     if (t.checked) { if (max && cur.size >= max) { t.checked = false; if (h) h.textContent = `אפשר לבחור עד ${max}`; return; } cur.add(t.value); } else cur.delete(t.value);
     wiz.data[k] = [...cur]; if (h) h.textContent = '';
-  } else if (t.dataset.w) { wiz.data[t.dataset.w] = t.value; if (t.type === 'range') t.nextElementSibling.textContent = t.value; }
+  } else if (t.dataset.w) {
+    wiz.data[t.dataset.w] = t.value; if (t.type === 'range') t.nextElementSibling.textContent = t.value;
+    if (t.name === 'role') document.querySelectorAll('.rolecard').forEach((c) => c.classList.toggle('on', c.contains(t)));
+  }
 });
 function profileDetail(p) {
   const sk = [...p.ranked].sort((x, y) => y.v - x.v); const day = (n) => pDate(planBase(p), n); const A = p.answers;
@@ -892,7 +896,7 @@ function renderIntake(owner) {
     return;
   }
   if (!wiz || !wiz.public) wiz = { step: 0, data: { hours: '10', readiness: '7', languages: ['עברית'] }, public: true };
-  $('#view').innerHTML = `${wiz.step === 0 ? '<p class="muted">שאלון היכרות קצר (כ-7 דקות). התשובות יעזרו לנו להכין לך תוכנית עבודה אישית. בסוף תועבר/י לקביעת פגישה.</p>' : ''}${wizView()}`;
+  $('#view').innerHTML = wizView();
 }
 /* תשובות שמגיעות מבחוץ: רק מפתחות פשוטים, מחרוזות קצרות ורשימות קצרות */
 function cleanAnswers(src) {

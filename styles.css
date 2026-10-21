@@ -97,3 +97,17 @@ mark{background:#f3dfb0;background:color-mix(in srgb,var(--pri) 30%,transparent)
 .hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
 .linkbox{display:flex;gap:8px}.linkbox input{flex:1;min-width:0}
 a.btn{display:inline-block;text-decoration:none}a.btn.pri{background:var(--pri);border-color:var(--pri);color:var(--on-pri)}
+.wizwrap{max-width:680px;margin:0 auto}
+.wsec{border:0;margin:0;padding:0 0 14px;min-width:0}.wsec+.wsec{border-top:1px solid var(--line);padding-top:14px}
+.wsec legend{padding:0;margin-bottom:8px;font-weight:600;font-size:15px;color:var(--ink)}
+.fld{min-width:0;margin-bottom:8px}.fld label{margin-top:0}
+.grid2,.grid3{gap:0 12px}
+.rolecards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.rolecard{position:relative;display:flex;flex-direction:column;gap:2px;margin:0;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s}
+.rolecard input{position:absolute;opacity:0;pointer-events:none}
+.rolecard .rc-t{font-weight:600;font-size:16px;color:var(--ink)}.rolecard .rc-d{font-size:13px;color:var(--mut)}
+.rolecard:hover{border-color:var(--pri)}
+.rolecard.on{border-color:var(--pri);background:#f6efe3;background:color-mix(in srgb,var(--pri) 12%,var(--card));box-shadow:inset 0 0 0 1px var(--pri)}
+.rolecard:focus-within{outline:2px solid var(--pri);outline-offset:2px}
+.wsec>legend{float:right;width:100%}.wsec>legend+*{clear:both}
+@media(max-width:520px){.rolecards{grid-template-columns:1fr}.rolecard{flex-direction:row;align-items:baseline;gap:8px;padding:10px 12px}}
