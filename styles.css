@@ -111,3 +111,6 @@ a.btn{display:inline-block;text-decoration:none}a.btn.pri{background:var(--pri);
 .rolecard:focus-within{outline:2px solid var(--pri);outline-offset:2px}
 .wsec>legend{float:right;width:100%}.wsec>legend+*{clear:both}
 @media(max-width:520px){.rolecards{grid-template-columns:1fr}.rolecard{flex-direction:row;align-items:baseline;gap:8px;padding:10px 12px}}
+.wsec legend .lsub{font-weight:400;font-size:13px}
+.wsec .chips{margin-top:0}.wsec .fld+.fld{margin-top:0}
+.wsec .q:last-child{border-bottom:0}

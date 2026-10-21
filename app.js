@@ -796,37 +796,37 @@ function wizView() {
   const chips = (k, opts, max = 0) => `<div class="chips" role="group">${opts.map((o) => `<label class="chip"><input type="checkbox" data-wg="${k}" ${max ? `data-max="${max}"` : ''} value="${esc(o)}" ${(d[k] || []).includes(o) ? 'checked' : ''}> ${esc(o)}</label>`).join('')}</div><p class="err hint" id="hint_${k}" role="alert"></p>`;
   const inp = (k, label, type = 'text', extra = '') => `<div class="fld"><label for="w_${k}">${label}</label><input id="w_${k}" data-w="${k}" type="${type}" value="${wv(k)}" ${extra}></div>`;
   const tx = (k, label) => `<div class="fld"><label for="w_${k}">${label}</label><textarea id="w_${k}" data-w="${k}">${wv(k)}</textarea></div>`;
-  const sec = (title, html) => `<fieldset class="wsec"><legend>${title}</legend>${html}</fieldset>`;
+  const sec = (title, html, sub = '') => `<fieldset class="wsec"><legend>${title}${sub ? ` <span class="muted lsub">${sub}</span>` : ''}</legend>${html}</fieldset>`;
   const lab = (t, sub = '') => `<label>${t}${sub ? ` <span class="muted">${sub}</span>` : ''}</label>`;
   let body = '';
   if (s === 0) body = sec('פרטים אישיים', inp('name', 'שם מלא', 'text', 'autocomplete="off" placeholder="לדוגמה: נועה כהן"'))
     + sec('מה התפקיד שלך?', `<div class="rolecards" role="radiogroup" aria-label="תפקיד">${Object.entries(P_ROLES).map(([k, v]) => `<label class="rolecard ${d.role === k ? 'on' : ''}"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}><span class="rc-t">${v}</span><span class="rc-d">${P_ROLE_DESC[k]}</span></label>`).join('')}</div>`)
     + sec('פרטי קשר', `<div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off" placeholder="050-0000000"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off" placeholder="name@example.com"')}</div>${inp('city', 'עיר / אזור', 'text', 'placeholder="לדוגמה: תל אביב"')}`)
     + sec('ניסיון וזמינות', `<div class="grid2"><div class="fld">${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div>${inp('hours', 'שעות בשבוע לבנייה ולצמיחה', 'number', 'min="0" max="80"')}</div>`);
-  if (s === 1) body = `${lab('תחומי התמחות', '(אפשר כמה)')}${chips('specialties', P_OPT.specialties)}${inp('specialtiesOther', 'תחום נוסף שלא ברשימה')}
-    ${lab('השכלה והסמכות', '(אפשר כמה)')}${chips('education', P_OPT.education)}${inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)')}
-    ${lab('שפות עבודה', '(אפשר כמה)')}${chips('languages', P_OPT.languages)}${inp('languagesOther', 'שפה נוספת')}`;
-  if (s === 2) body = `${lab('קהל יעד', '(אפשר כמה)')}${chips('audience', P_OPT.audience)}
-    ${lab('ערוצים וכלים שכבר בשימוש', '(אפשר כמה)')}${chips('channels', P_OPT.channels)}
-    <div class="grid3">${inp('incomeNow', 'הכנסה חודשית היום (₪)', 'number', 'min="0"')}${inp('incomeTarget', 'יעד הכנסה חודשית (₪)', 'number', 'min="0"')}${inp('price', 'מחיר לפגישה / שירות (₪)', 'number', 'min="0"')}</div>
-    ${lab('תקציב להשקעה ברבעון הקרוב')}${sel('budget', P_OPT.budget)}`;
-  if (s === 3) body = `${lab('מטרות מרכזיות', '(עד שש)')}<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" data-max="6" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>
-    ${tx('success', 'איך נראית הצלחה בעוד 90 יום?')}
-    <div class="grid2">${inp('clientsTarget', 'יעד לקוחות / מטופלים חדשים בחודש', 'number', 'min="0"')}${inp('hoursTarget', 'יעד שעות עבודה בשבוע', 'number', 'min="0" max="80"')}</div>`;
-  if (s === 4) body = `<p class="muted">דרג/י את עצמך מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`;
-  if (s === 5) body = `<div class="grid3"><div>${lab('קצב עבודה')}${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}</div><div>${lab('קבלת החלטות')}${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}</div><div>${lab('תקשורת מועדפת')}${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}</div></div>
-    ${lab('ערכים מובילים', '(עד שלושה)')}${chips('values', P_OPT.values, 3)}
-    ${lab('מה נותן לך אנרגיה?', '(אפשר כמה)')}${chips('energyGive', P_OPT.energy)}
-    ${lab('מה לוקח ממך אנרגיה?', '(אפשר כמה)')}${chips('energyTake', P_OPT.energy)}
-    ${lab('זמני עבודה מועדפים', '(אפשר כמה)')}${chips('times', P_OPT.times)}
-    ${lab('איך הכי נוח לך ללמוד?', '(אפשר כמה)')}${chips('learning', P_OPT.learning)}`;
-  if (s === 6) body = `${lab('מה מעכב אותך היום?', '(אפשר כמה)')}${chips('barriers', P_OPT.barriers)}${tx('obstacle', 'במילים שלך')}
-    ${lab('איזו תמיכה היית רוצה מאיתנו?', '(אפשר כמה)')}${chips('support', P_OPT.support)}
-    <div class="q"><span>עד כמה את/ה מוכן/ה להתחיל עכשיו? (1 עד 10)</span><span class="rate"><input type="range" min="1" max="10" step="1" data-w="readiness" value="${d.readiness || 7}" aria-label="מוכנות"><output>${d.readiness || 7}</output></span></div>
-    ${lab('מתי אפשר להתחיל?')}${sel('start', P_OPT.start)}`;
+  const many = '(אפשר לבחור כמה)';
+  if (s === 1) body = sec('תחומי התמחות', chips('specialties', P_OPT.specialties) + inp('specialtiesOther', 'תחום נוסף שלא ברשימה'), many)
+    + sec('השכלה והסמכות', chips('education', P_OPT.education) + inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)'), many)
+    + sec('שפות עבודה', chips('languages', P_OPT.languages) + inp('languagesOther', 'שפה נוספת'), many);
+  if (s === 2) body = sec('קהל יעד', chips('audience', P_OPT.audience), many)
+    + sec('ערוצים וכלים שכבר בשימוש', chips('channels', P_OPT.channels), many)
+    + sec('מספרים', `<div class="grid3">${inp('incomeNow', 'הכנסה חודשית היום (₪)', 'number', 'min="0" placeholder="0"')}${inp('incomeTarget', 'יעד הכנסה חודשית (₪)', 'number', 'min="0" placeholder="0"')}${inp('price', 'מחיר לפגישה / שירות (₪)', 'number', 'min="0" placeholder="0"')}</div>`, '(לא חובה, אבל עוזר לחשב את התוכנית)')
+    + sec('תקציב להשקעה', `<div class="fld">${lab('ברבעון הקרוב')}${sel('budget', P_OPT.budget)}</div>`);
+  if (s === 3) body = sec('מטרות מרכזיות', `<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" data-max="6" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>`, '(עד שש)')
+    + sec('איך נראית הצלחה בעוד 90 יום?', tx('success', 'במילים שלך'))
+    + sec('יעדים במספרים', `<div class="grid2">${inp('clientsTarget', 'לקוחות / מטופלים חדשים בחודש', 'number', 'min="0" placeholder="0"')}${inp('hoursTarget', 'שעות עבודה בשבוע', 'number', 'min="0" max="80" placeholder="0"')}</div>`, '(לא חובה)');
+  if (s === 4) body = sec('דירוג עצמי', `<p class="muted" style="margin:0 0 6px">מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`);
+  if (s === 5) body = sec('איך את/ה עובד/ת', `<div class="grid3"><div class="fld">${lab('קצב עבודה')}${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}</div><div class="fld">${lab('קבלת החלטות')}${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}</div><div class="fld">${lab('תקשורת מועדפת')}${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}</div></div>`)
+    + sec('ערכים מובילים', chips('values', P_OPT.values, 3), '(עד שלושה)')
+    + sec('אנרגיה', `${lab('מה נותן לך אנרגיה?')}${chips('energyGive', P_OPT.energy)}${lab('מה לוקח ממך אנרגיה?')}${chips('energyTake', P_OPT.energy)}`, many)
+    + sec('זמנים ולמידה', `${lab('זמני עבודה מועדפים')}${chips('times', P_OPT.times)}${lab('איך הכי נוח לך ללמוד?')}${chips('learning', P_OPT.learning)}`, many);
+  if (s === 6) body = sec('מה מעכב אותך היום?', chips('barriers', P_OPT.barriers) + tx('obstacle', 'במילים שלך'), many)
+    + sec('איזו תמיכה היית רוצה מאיתנו?', chips('support', P_OPT.support), many)
+    + sec('מוכנות והתחלה', `<div class="q"><span>עד כמה את/ה מוכן/ה להתחיל עכשיו? (1 עד 10)</span><span class="rate"><input type="range" min="1" max="10" step="1" data-w="readiness" value="${d.readiness || 7}" aria-label="מוכנות"><output>${d.readiness || 7}</output></span></div><div class="fld" style="margin-top:8px">${lab('מתי אפשר להתחיל?')}${sel('start', P_OPT.start)}</div>`);
   if (s === 7) {
     P_ROLE_Q[d.role].forEach((q) => { if (q.type === 'number' && d[q.k] === undefined) d[q.k] = String(q.def ?? 0); });
-    body = P_ROLE_Q[d.role].map((q) => `<label ${q.opts ? '' : `for="w_${q.k}"`}>${q.label}</label>${q.opts ? sel(q.k, q.opts) : `<input id="w_${q.k}" data-w="${q.k}" type="${q.type || 'text'}" ${q.type === 'number' ? 'min="0"' : ''} value="${wv(q.k, q.def ?? '')}">`}`).join('');
+    const f = (q) => (q.opts ? `<div class="fld">${lab(q.label)}${sel(q.k, q.opts)}</div>` : inp(q.k, q.label, q.type || 'text', q.type === 'number' ? 'min="0"' : ''));
+    const qs = P_ROLE_Q[d.role]; const nums = qs.filter((q) => q.type === 'number'); const rest = qs.filter((q) => q.type !== 'number');
+    body = sec(`שאלות ל${P_ROLES[d.role]}`, `${rest.map(f).join('')}${nums.length ? `<div class="grid2">${nums.map(f).join('')}</div>` : ''}`, '(כמעט סיימנו)');
   }
   if (s === 0 && wiz.public) body += '<input class="hp" data-w="website" tabindex="-1" autocomplete="off" aria-hidden="true" placeholder="website">'; // מלכודת לבוטים
   const h1 = wiz.public ? esc(pub.form?.title || 'שאלון היכרות') : wiz.editId ? 'עריכת אפיון' : 'אפיון אישי';
