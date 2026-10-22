@@ -127,3 +127,27 @@ a.btn{display:inline-block;text-decoration:none}a.btn.pri{background:var(--pri);
 .seg label input,.rolecard input{width:1px;height:1px;margin:0;padding:0}
 .cgroup{margin-bottom:6px}.cg-t{font-size:13px;font-weight:600;color:var(--pri);margin:4px 0 4px}
 .cgroup .chips{margin:0}.cgroup .hint{display:none}
+/* שליחת התוכנית ללקוח */
+.sendopts{display:grid;gap:8px;margin:12px 0}
+.sendopts button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:start;padding:10px 14px;width:100%}
+.sendopts button span{font-size:13px;font-weight:400;opacity:.85}
+.sendopts button:disabled{opacity:.5;cursor:not-allowed}
+#printReport{display:none}
+@media print{
+  body.rp-on>*:not(#printReport){display:none!important}
+  body.rp-on #printReport{display:block;color:#111;font-size:12.5pt;line-height:1.55}
+  body.rp-on{background:#fff!important}
+  @page{margin:16mm 14mm}
+}
+#printReport .rp-head{display:flex;align-items:center;gap:12px;border-bottom:2px solid #8a6429;padding-bottom:10px;margin-bottom:14px}
+#printReport .rp-head img{height:54px}
+#printReport .rp-head div{display:flex;flex-direction:column}#printReport .rp-head b{font-size:15pt;color:#8a6429}#printReport .rp-head span{color:#555}
+#printReport h1{margin:0 0 2px;font-size:22pt}#printReport .rp-sub{color:#555;margin:0 0 14px}
+#printReport section{margin-bottom:14px}#printReport h2,#printReport h3{break-after:avoid}
+#printReport h2{color:#8a6429;font-size:15pt;margin:14px 0 6px;border-bottom:1px solid #e3d6bf;padding-bottom:3px}
+#printReport h3{font-size:12.5pt;margin:12px 0 4px}#printReport h3 span{font-weight:400;color:#666}
+#printReport li{margin-bottom:5px;break-inside:avoid}#printReport .rp-why{color:#555;font-size:11pt}
+#printReport .rp-sk{border-collapse:collapse;width:100%;max-width:520px}#printReport .rp-sk td{padding:3px 6px;border:0}
+#printReport .rp-bar{display:block;width:220px;height:9px;background:#eee;border-radius:5px;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+#printReport .rp-bar i{display:block;height:100%;background:#8a6429;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+#printReport .rp-foot{margin-top:18px;color:#777;font-size:10pt;border-top:1px solid #ddd;padding-top:6px}

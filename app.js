@@ -552,6 +552,7 @@ const ACTIONS = {
   profNew: () => { wiz = { step: 0, data: { hours: '10', readiness: '7', languages: ['עברית'] }, editId: null }; profOpen = null; render(); scrollTo(0, 0); },
   profOpen: (id) => { profOpen = id; const p = by(S.profiles, id); if (p?.isNew) { delete p.isNew; save(); } render(); scrollTo(0, 0); },
   profBack: () => { profOpen = null; render(); },
+  profSend: (id) => { const p = by(S.profiles, id); if (p) sendDialog(p); },
   profEdit: (id) => { wiz = { step: 0, data: JSON.parse(JSON.stringify(by(S.profiles, id).answers)), editId: id }; profOpen = null; render(); scrollTo(0, 0); },
   profDel: (id) => ask('למחוק את האפיון והתוכנית? משימות שכבר נוצרו מהתוכנית יישארו.', () => { S.profiles = S.profiles.filter((x) => x.id !== id); if (profOpen === id) profOpen = null; save(); render(); }),
   profMore: (id, d) => { const p = by(S.profiles, id); const x = by(p.more || [], d.mid); if (!x) return; p.more = p.more.filter((m) => m !== x); p.plan.push(x); p.plan.sort((m, n) => m.phase - n.phase); save(); render(); },
@@ -944,12 +945,70 @@ document.addEventListener('input', (ev) => {
     if (t.type === 'radio' && t.closest('.seg')) t.closest('.seg').querySelectorAll('label').forEach((l) => l.classList.toggle('on', l.contains(t)));
   }
 });
+/* ---------- שליחת התוכנית למי שמילא: PDF, וואטסאפ, מייל ---------- */
+const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || '';
+const dmy = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
+const planGroups = (p) => [1, 2, 3, 4].map((ph) => ({ ph, items: p.plan.filter((x) => x.phase === ph) })).filter((g) => g.items.length);
+/* טלפון ישראלי לפורמט של וואטסאפ: 050-1234567 → 972501234567 */
+const waPhone = (ph) => { let d = String(ph || '').replace(/\D/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = '972' + d.slice(1); return d.length >= 11 ? d : ''; };
+function planText(p) {
+  const day = (n) => dmy(pDate(planBase(p), n)); const L = [];
+  L.push(`שלום ${firstName(p.name)},`, '', 'תודה שמילאת את שאלון האפיון. הנה התוכנית האישית שלך ל-90 יום.', '');
+  L.push(`הפרופיל שלך: ${p.archetype}`, `החוזקה הבולטת: ${P_SKILLS[p.top]}`, `תחומים לחיזוק: ${p.low.map((k) => P_SKILLS[k]).join(', ')}`);
+  if ((p.answers.goals || []).length) L.push(`המטרות שבחרת: ${p.answers.goals.map((g) => P_GOALS[g]).join(', ')}`);
+  for (const g of planGroups(p)) { L.push('', `*${P_PHASES[g.ph].label}* (עד ${day(P_PHASES[g.ph].days)})`); g.items.forEach((x, i) => L.push(`${i + 1}. ${x.title}`)); }
+  if ((p.kpis || []).length) { L.push('', '*מדדי הצלחה ל-90 יום*'); p.kpis.forEach((k) => L.push(`• ${k}`)); }
+  L.push('', 'נעבור על התוכנית יחד בפגישה הקרובה.', '', 'בהצלחה,', 'טייזון – היועץ העסקי שלך');
+  return L.join('\n');
+}
+/* דוח נקי ללקוח (בלי כפתורים ובלי נתונים פנימיים), מודפס או נשמר כ-PDF */
+function planReport(p) {
+  const day = (n) => dmy(pDate(planBase(p), n)); const sk = [...p.ranked].sort((x, y) => y.v - x.v);
+  const logo = document.querySelector('.top .logo')?.src || '';
+  return `<div class="rp-head">${logo ? `<img src="${logo}" alt="TizonHealth">` : ''}<div><b>טייזון – היועץ העסקי שלך</b><span>תוכנית אישית ל-90 יום</span></div></div>
+  <h1>${esc(p.name)}</h1><p class="rp-sub">${esc(P_ROLES[p.role] || '')} · הופק ב-${esc(new Date().toLocaleDateString('he-IL'))} · תחילת התוכנית ${esc(dmy(pDate(planBase(p), 0)))}</p>
+  <section><h2>${esc(p.archetype)}</h2><p>החוזקה הבולטת: <b>${esc(P_SKILLS[p.top])}</b>. תחומים לחיזוק: <b>${p.low.map((k) => esc(P_SKILLS[k])).join(', ')}</b>.</p>
+  <table class="rp-sk">${sk.map((x) => `<tr><td>${esc(P_SKILLS[x.k])}</td><td><span class="rp-bar"><i style="width:${x.v * 20}%"></i></span></td><td>${x.v}/5</td></tr>`).join('')}</table>
+  ${(p.answers.goals || []).length ? `<p>המטרות שבחרת: ${p.answers.goals.map((g) => esc(P_GOALS[g])).join(' · ')}</p>` : ''}${p.answers.success ? `<p>הצלחה בעוד 90 יום, במילים שלך: <i>${esc(p.answers.success)}</i></p>` : ''}</section>
+  ${(p.kpis || []).length ? `<section><h2>מדדי הצלחה ל-90 יום</h2><ul>${p.kpis.map((k) => `<li>${esc(k)}</li>`).join('')}</ul></section>` : ''}
+  <section><h2>התוכנית שלך</h2>${planGroups(p).map((g) => `<h3>${esc(P_PHASES[g.ph].label)} <span>· עד ${esc(day(P_PHASES[g.ph].days))}</span></h3><ol>${g.items.map((x) => `<li><b>${esc(x.title)}</b><br><span class="rp-why">${esc(x.why)}</span></li>`).join('')}</ol>`).join('')}</section>
+  ${(p.notes || []).filter(Boolean).length ? `<section><h2>איך נעבוד ביחד</h2><ul>${p.notes.filter(Boolean).map((n) => `<li>${esc(n)}</li>`).join('')}</ul></section>` : ''}
+  <p class="rp-foot">התוכנית היא המלצה כללית לתכנון עבודה, ואינה ייעוץ משפטי, פיננסי או רפואי.</p>`;
+}
+function printReport(p) {
+  let r = document.getElementById('printReport'); if (!r) { r = document.createElement('div'); r.id = 'printReport'; document.body.appendChild(r); }
+  r.innerHTML = planReport(p); document.body.classList.add('rp-on');
+  const t = document.title; document.title = `תוכנית אישית - ${p.name}`; // שם הקובץ כשנשמר כ-PDF
+  const done = () => { document.body.classList.remove('rp-on'); document.title = t; removeEventListener('afterprint', done); };
+  addEventListener('afterprint', done); setTimeout(() => window.print(), 50);
+}
+function markSent(p, via) { p.sentAt = Date.now(); p.sentVia = via; save(); render(); }
+function sendDialog(p) {
+  const A = p.answers; const wa = waPhone(A.phone); const mail = (A.email || '').trim(); const fn = esc(firstName(p.name));
+  show(`<form method="dialog" class="senddlg"><h2>שליחת התוכנית ל${fn}</h2><p class="muted">בחר/י איך לשלוח. מומלץ: לשמור כ-PDF ולצרף בוואטסאפ, וגם לשלוח את עיקרי התוכנית בהודעה.</p>
+  <div class="sendopts">
+   <button type="button" class="pri" data-s="pdf"><b>📄 דוח PDF מעוצב</b><span>נפתח חלון הדפסה: בוחרים "שמור כ-PDF" ומצרפים בוואטסאפ או במייל</span></button>
+   <button type="button" data-s="wa" ${wa ? '' : 'disabled'}><b>💬 וואטסאפ</b><span>${wa ? `הודעה מוכנה עם עיקרי התוכנית אל <span dir="ltr">${esc(A.phone)}</span>` : 'לא הוזן טלפון בשאלון'}</span></button>
+   <button type="button" data-s="mail" ${mail ? '' : 'disabled'}><b>✉️ מייל</b><span>${mail ? `טיוטת מייל אל <span dir="ltr">${esc(mail)}</span>` : 'לא הוזן מייל בשאלון'}</span></button>
+   <button type="button" data-s="copy"><b>📋 העתקת הטקסט</b><span>להדבקה בכל מקום אחר</span></button>
+  </div><p class="ok" id="sendMsg" role="status"></p><div class="row"><button>סגירה</button></div></form>`, (d) => {
+    const msg = (t) => { d.querySelector('#sendMsg').textContent = t; };
+    d.querySelectorAll('[data-s]').forEach((b) => { b.onclick = () => {
+      const s = b.dataset.s; const text = planText(p);
+      if (s === 'pdf') { d.close(); markSent(p, 'PDF'); printReport(p); }
+      if (s === 'wa') { window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); markSent(p, 'וואטסאפ'); msg('נפתח וואטסאפ עם ההודעה. נשאר רק ללחוץ "שלח".'); }
+      if (s === 'mail') { location.href = `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent('התוכנית האישית שלך ל-90 יום – טייזון')}&body=${encodeURIComponent(text)}`; markSent(p, 'מייל'); msg('נפתחה טיוטת מייל. אפשר לצרף אליה גם את קובץ ה-PDF.'); }
+      if (s === 'copy') { (navigator.clipboard?.writeText(text) || Promise.reject()).then(() => msg('הטקסט הועתק.'), () => textBox('טקסט התוכנית', text, 'סמנו והעתיקו')); }
+    }; });
+  });
+}
 function profileDetail(p) {
   const sk = [...p.ranked].sort((x, y) => y.v - x.v); const day = (n) => pDate(planBase(p), n); const A = p.answers;
   const tags = (arr) => (arr || []).filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join(' ');
   const row = (k, v) => (v ? `<div class="kv"><span class="muted">${k}</span><span>${v}</span></div>` : '');
   const byPhase = [1, 2, 3, 4].map((ph) => ({ ph, items: p.plan.filter((x) => x.phase === ph) })).filter((g) => g.items.length);
-  return `<div class="bar"><h1 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span></h1><span><button data-do="profBack">← כל האפיונים</button> <button data-do="profEdit" data-id="${p.id}">עריכת אפיון</button></span></div>
+  return `<div class="bar"><h1 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span></h1><span><button class="pri" data-do="profSend" data-id="${p.id}">שליחה ל${esc(firstName(p.name))}</button> <button data-do="profEdit" data-id="${p.id}">עריכת אפיון</button> <button data-do="profBack">← כל האפיונים</button></span></div>
+  ${p.sentAt ? `<p class="muted" style="margin-top:-6px">התוכנית נשלחה ל${esc(firstName(p.name))} ב-${esc(new Date(p.sentAt).toLocaleDateString('he-IL'))} (${esc(p.sentVia || '')}).</p>` : ''}
   <div class="card"><h2>${esc(p.archetype)}</h2><p>החוזקה הבולטת: <b>${esc(P_SKILLS[p.top])}</b>. תחומים לחיזוק: <b>${p.low.map((k) => esc(P_SKILLS[k])).join(', ')}</b>.</p>
   ${sk.map((s) => `<div style="margin:8px 0"><div class="bar" style="margin:0"><span>${esc(P_SKILLS[s.k])}</span><b>${s.v}/5</b></div><div class="meter"><i style="width:${s.v * 20}%;background:${s.v <= 2 ? 'var(--warn)' : 'var(--ok)'}"></i></div></div>`).join('')}
   ${digitalScore(p.answers) !== null ? `<div style="margin:8px 0"><div class="bar" style="margin:0"><span>בשלות דיגיטלית</span><b>${digitalScore(p.answers)}%</b></div><div class="meter"><i style="width:${digitalScore(p.answers)}%;background:var(--pri)"></i></div></div>` : ''}
