@@ -1252,7 +1252,7 @@ function profileView() {
   ${intakeCard()}
   <div class="bar"><span class="muted">${list.length ? list.length + ' אפיונים' : ''}</span><button class="pri" data-do="profNew">+ אפיון חדש</button></div>
   ${list.length ? list.map((p) => `<div class="card"><div class="bar" style="margin:0"><div><h2 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span> ${p.isNew ? '<span class="tag warn">חדש</span>' : ''} ${p.source === 'client' ? '<span class="tag">מולא ע״י הלקוח</span>' : ''} ${p.tasksAdded ? '<span class="tag ok">התוכנית במשימות</span>' : ''}</h2>
-    <span class="muted">${esc(p.archetype)} · ${p.plan.length} פעולות · ${esc(new Date(p.createdAt).toLocaleDateString('he-IL'))}</span></div>
+    <span class="muted">${esc(p.archetype)} · ${birthText(p.answers.birth) ? `נולד/ה ${esc(birthText(p.answers.birth))} · ` : ''}${p.plan.length} פעולות · ${esc(new Date(p.createdAt).toLocaleDateString('he-IL'))}</span></div>
     <span><button class="sm pri" data-do="profOpen" data-id="${p.id}">פתח תוכנית</button> <button class="sm" data-do="profEdit" data-id="${p.id}">עריכת אפיון</button> <button class="sm del" data-do="profDel" data-id="${p.id}">מחיקה</button></span></div></div>`).join('')
     : '<div class="card empty"><p>עוד לא מולא אפיון.</p><button class="pri" data-do="profNew">התחל אפיון ראשון</button></div>'}`;
 }
@@ -1267,7 +1267,7 @@ function wizView() {
   const sec = (title, html, sub = '') => `<fieldset class="wsec"><legend>${title}${sub ? ` <span class="muted lsub">${sub}</span>` : ''}</legend>${html}</fieldset>`;
   const lab = (t, sub = '') => `<label>${t}${sub ? ` <span class="muted">${sub}</span>` : ''}</label>`;
   let body = '';
-  if (key === 'me') body = sec('פרטים אישיים', inp('name', 'שם מלא', 'text', 'autocomplete="off" placeholder="לדוגמה: נועה כהן"'))
+  if (key === 'me') body = sec('פרטים אישיים', `<div class="grid2">${inp('name', 'שם מלא', 'text', 'autocomplete="off" placeholder="לדוגמה: נועה כהן"')}${inp('birth', 'תאריך לידה', 'date', `dir="ltr" min="1920-01-01" max="${todayISO()}" required`)}</div>`)
     + sec('מה התפקיד שלך?', `<div class="rolecards" role="radiogroup" aria-label="תפקיד">${Object.entries(P_ROLES).map(([k, v]) => `<label class="rolecard ${d.role === k ? 'on' : ''}"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}><span class="rc-t">${v}</span><span class="rc-d">${P_ROLE_DESC[k]}</span></label>`).join('')}</div>`)
     + sec('פרטי קשר', `<div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off" placeholder="050-0000000"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off" placeholder="name@example.com"')}</div>${inp('city', 'עיר / אזור', 'text', 'placeholder="לדוגמה: תל אביב"')}`)
     + sec('ניסיון וזמינות', `<div class="grid2"><div class="fld">${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div>${inp('hours', 'שעות בשבוע לבנייה ולצמיחה', 'number', 'min="0" max="80"')}</div>`);
@@ -1308,10 +1308,15 @@ function wizView() {
   return `<div class="wizwrap"><h1>${h1}</h1>${wiz.public && key === 'me' ? '<p class="muted">שאלון היכרות קצר (כ-7 דקות). התשובות יעזרו לנו להכין לך תוכנית עבודה אישית. בסוף תועבר/י לקביעת פגישה.</p>' : ''}<div class="card wiz"><div class="muted">שלב ${s + 1} מתוך ${WIZ_STEPS.length}: ${WIZ_STEPS[s]}</div><div class="meter" style="margin:6px 0 12px"><i style="width:${((s + 1) / WIZ_STEPS.length) * 100}%"></i></div>
   ${body}<p id="wizErr" class="err" role="alert"></p><div class="row"><button class="pri" data-do="wizNext">${last ? (wiz.public ? 'שליחה' : 'צור תוכנית') : 'הבא'}</button>${s > 0 ? '<button data-do="wizBack">הקודם</button>' : ''}${wiz.public ? '' : '<button class="tour-x" data-do="wizCancel">ביטול</button>'}</div></div></div>`;
 }
+const todayISO = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const birthOk = (b) => /^\d{4}-\d{2}-\d{2}$/.test(b || '') && b >= '1920-01-01' && b <= todayISO();
+/* תאריך לידה בתצוגה: 15/03/1985 (גיל 41) */
+const birthText = (b) => { if (!birthOk(b)) return ''; const [y, m, dd] = b.split('-').map(Number); const t = new Date(); const age = t.getFullYear() - y - ((t.getMonth() + 1 < m || (t.getMonth() + 1 === m && t.getDate() < dd)) ? 1 : 0); return `${String(dd).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y} (גיל ${age})`; };
 function wizCheck() {
   const d = wiz.data; const s = wiz.step;
   const key = WIZ[s][0];
   if (key === 'me' && !(d.name || '').trim()) return 'יש להזין שם';
+  if (key === 'me' && !birthOk(d.birth)) return d.birth ? 'תאריך הלידה אינו תקין' : 'יש להזין תאריך לידה';
   if (key === 'me' && !d.role) return 'יש לבחור תפקיד';
   if (key === 'me' && d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) return 'כתובת המייל אינה תקינה';
   if (key === 'goals' && !(d.goals || []).length) return 'יש לבחור לפחות מטרה אחת';
@@ -1351,7 +1356,7 @@ function profileDetail(p) {
   ${p.tasksAdded ? '<p class="muted">התוכנית כבר הועברה למשימות. אפשר להוסיף פעולות כתתי-משימות ישירות בלשונית "משימות".</p>' : ''}</div>` : ''}
   <div class="card"><h2>איך נעבוד ביחד</h2><ul>${p.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul><p class="muted">התוכנית היא המלצה כללית לתכנון עבודה, ואינה ייעוץ משפטי, פיננסי או רפואי.</p></div>
   <details class="card details"><summary><h2>פרטים ורקע</h2> <span class="muted">(לחץ לפתיחה)</span></summary>
-  ${row('טלפון', A.phone ? `<span dir="ltr">${esc(A.phone)}</span>` : '')}${row('מייל', A.email ? `<span dir="ltr">${esc(A.email)}</span>` : '')}${row('עיר / אזור', esc(A.city || ''))}${row('ניסיון', esc(A.exp || ''))}
+  ${row('תאריך לידה', esc(birthText(A.birth)))}${row('טלפון', A.phone ? `<span dir="ltr">${esc(A.phone)}</span>` : '')}${row('מייל', A.email ? `<span dir="ltr">${esc(A.email)}</span>` : '')}${row('עיר / אזור', esc(A.city || ''))}${row('ניסיון', esc(A.exp || ''))}
   ${row('התמחות', tags([...(A.specialties || []), A.specialtiesOther]))}${row('תחומי טיפול', tags(A.focus))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
   ${row('קהל יעד', tags(A.audience))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
   ${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
