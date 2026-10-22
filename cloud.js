@@ -9,8 +9,14 @@
   firebase.initializeApp(cfg);
   const auth = firebase.auth();
   const db = firebase.firestore();
+  // מצב תאימות: רשתות עם סינון (נטפרי, רימון) או אנטי-וירוס חוסמות לפעמים את החיבור החי של Firestore. long polling עובר דרכם.
+  const LP_KEY = 'tizon-fs-longpoll'; let longPoll = false;
+  try { longPoll = localStorage.getItem(LP_KEY) === '1'; } catch { /* ignore */ }
+  if (longPoll) { try { db.settings({ experimentalForceLongPolling: true, experimentalAutoDetectLongPolling: false, merge: true }); } catch { longPoll = false; try { localStorage.removeItem(LP_KEY); } catch { /* ignore */ } } }
   if (window.FIREBASE_EMULATOR) { auth.useEmulator('http://127.0.0.1:9099'); db.useEmulator('127.0.0.1', 8089); } // לבדיקות מקומיות בלבד
   const SESSION = Math.random().toString(36).slice(2);
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timeout'), { code: 'timeout' })), ms))]);
+  const REST = (window.FIREBASE_EMULATOR ? 'http://127.0.0.1:8089/v1' : 'https://firestore.googleapis.com/v1') + `/projects/${cfg.projectId}/databases/(default)/documents`;
   /* כניסה עם שם משתמש: Firebase מזהה לפי מייל, ולכן שם משתמש ממופה לכתובת פנימית שאינה נשלחת לשום מקום (.invalid) */
   const UDOM = '@username.invalid';
   const isUsername = (e) => (e || '').endsWith(UDOM);
@@ -29,6 +35,7 @@
   };
 
   const ERR = {
+    timeout: 'החיבור לשרת איטי מדי או חסום',
     'auth/invalid-email': 'המייל או שם המשתמש אינם תקינים',
     'auth/missing-password': 'יש להזין סיסמה',
     'auth/weak-password': 'הסיסמה קצרה מדי (לפחות 6 תווים)',
@@ -163,9 +170,32 @@
     },
     stopMarket,
     /* ----- שאלון ללקוחות (בלי התחברות): publicForms/{uid} ציבורי לקריאה, intakes/{id} פתוח רק ליצירה ----- */
-    async getPublicForm(uid) { try { const s = await db.collection('publicForms').doc(uid).get(); return s.exists ? s.data() : null; } catch { return null; } },
+    async getPublicForm(uid) {
+      try {
+        const r = await withTimeout(fetch(`${REST}/publicForms/${encodeURIComponent(uid)}?key=${cfg.apiKey}`), 10000);
+        if (r.status === 404) return null;
+        if (!r.ok) throw new Error('http ' + r.status);
+        const f = (await r.json()).fields || {};
+        return { enabled: !!(f.enabled && f.enabled.booleanValue), bookingUrl: (f.bookingUrl && f.bookingUrl.stringValue) || '', title: (f.title && f.title.stringValue) || '' };
+      } catch {
+        try { const s = await withTimeout(db.collection('publicForms').doc(uid).get(), 8000); return s.exists ? s.data() : null; } catch (e) { return { error: msg(e) }; }
+      }
+    },
     savePublicForm: (uid, f) => wrap(db.collection('publicForms').doc(uid).set({ enabled: !!f.enabled, bookingUrl: f.bookingUrl || '', title: f.title || '', updatedAt: Date.now() })),
-    submitIntake: (ownerUid, answers) => wrap(db.collection('intakes').add({ ownerUid, answers: JSON.stringify(answers), createdAt: Date.now(), v: 1 })),
+    async submitIntake(ownerUid, answers) {
+      const json = JSON.stringify(answers); const now = Date.now();
+      try {
+        const r = await withTimeout(fetch(`${REST}/intakes?key=${cfg.apiKey}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields: { ownerUid: { stringValue: ownerUid }, answers: { stringValue: json }, createdAt: { integerValue: String(now) }, v: { integerValue: '1' } } }) }), 15000);
+        if (r.ok) return { ok: true };
+        if (r.status === 403) return { ok: false, error: 'השאלון אינו פתוח כרגע לקבלת תשובות' };
+        throw new Error('http ' + r.status);
+      } catch {
+        return wrap(withTimeout(db.collection('intakes').add({ ownerUid, answers: json, createdAt: now, v: 1 }), 15000));
+      }
+    },
+    longPoll,
+    enableCompat() { try { localStorage.setItem(LP_KEY, '1'); } catch { /* ignore */ } },
+    withTimeout,
     watchIntakes(uid, cb) {
       intakeUnsub?.();
       intakeUnsub = db.collection('intakes').where('ownerUid', '==', uid).onSnapshot((s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});

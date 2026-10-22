@@ -170,8 +170,14 @@ window.FIREBASE_CONFIG = {
   firebase.initializeApp(cfg);
   const auth = firebase.auth();
   const db = firebase.firestore();
+  // מצב תאימות: רשתות עם סינון (נטפרי, רימון) או אנטי-וירוס חוסמות לפעמים את החיבור החי של Firestore. long polling עובר דרכם.
+  const LP_KEY = 'tizon-fs-longpoll'; let longPoll = false;
+  try { longPoll = localStorage.getItem(LP_KEY) === '1'; } catch { /* ignore */ }
+  if (longPoll) { try { db.settings({ experimentalForceLongPolling: true, experimentalAutoDetectLongPolling: false, merge: true }); } catch { longPoll = false; try { localStorage.removeItem(LP_KEY); } catch { /* ignore */ } } }
   if (window.FIREBASE_EMULATOR) { auth.useEmulator('http://127.0.0.1:9099'); db.useEmulator('127.0.0.1', 8089); } // לבדיקות מקומיות בלבד
   const SESSION = Math.random().toString(36).slice(2);
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('timeout'), { code: 'timeout' })), ms))]);
+  const REST = (window.FIREBASE_EMULATOR ? 'http://127.0.0.1:8089/v1' : 'https://firestore.googleapis.com/v1') + `/projects/${cfg.projectId}/databases/(default)/documents`;
   /* כניסה עם שם משתמש: Firebase מזהה לפי מייל, ולכן שם משתמש ממופה לכתובת פנימית שאינה נשלחת לשום מקום (.invalid) */
   const UDOM = '@username.invalid';
   const isUsername = (e) => (e || '').endsWith(UDOM);
@@ -190,6 +196,7 @@ window.FIREBASE_CONFIG = {
   };
 
   const ERR = {
+    timeout: 'החיבור לשרת איטי מדי או חסום',
     'auth/invalid-email': 'המייל או שם המשתמש אינם תקינים',
     'auth/missing-password': 'יש להזין סיסמה',
     'auth/weak-password': 'הסיסמה קצרה מדי (לפחות 6 תווים)',
@@ -324,9 +331,32 @@ window.FIREBASE_CONFIG = {
     },
     stopMarket,
     /* ----- שאלון ללקוחות (בלי התחברות): publicForms/{uid} ציבורי לקריאה, intakes/{id} פתוח רק ליצירה ----- */
-    async getPublicForm(uid) { try { const s = await db.collection('publicForms').doc(uid).get(); return s.exists ? s.data() : null; } catch { return null; } },
+    async getPublicForm(uid) {
+      try {
+        const r = await withTimeout(fetch(`${REST}/publicForms/${encodeURIComponent(uid)}?key=${cfg.apiKey}`), 10000);
+        if (r.status === 404) return null;
+        if (!r.ok) throw new Error('http ' + r.status);
+        const f = (await r.json()).fields || {};
+        return { enabled: !!(f.enabled && f.enabled.booleanValue), bookingUrl: (f.bookingUrl && f.bookingUrl.stringValue) || '', title: (f.title && f.title.stringValue) || '' };
+      } catch {
+        try { const s = await withTimeout(db.collection('publicForms').doc(uid).get(), 8000); return s.exists ? s.data() : null; } catch (e) { return { error: msg(e) }; }
+      }
+    },
     savePublicForm: (uid, f) => wrap(db.collection('publicForms').doc(uid).set({ enabled: !!f.enabled, bookingUrl: f.bookingUrl || '', title: f.title || '', updatedAt: Date.now() })),
-    submitIntake: (ownerUid, answers) => wrap(db.collection('intakes').add({ ownerUid, answers: JSON.stringify(answers), createdAt: Date.now(), v: 1 })),
+    async submitIntake(ownerUid, answers) {
+      const json = JSON.stringify(answers); const now = Date.now();
+      try {
+        const r = await withTimeout(fetch(`${REST}/intakes?key=${cfg.apiKey}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields: { ownerUid: { stringValue: ownerUid }, answers: { stringValue: json }, createdAt: { integerValue: String(now) }, v: { integerValue: '1' } } }) }), 15000);
+        if (r.ok) return { ok: true };
+        if (r.status === 403) return { ok: false, error: 'השאלון אינו פתוח כרגע לקבלת תשובות' };
+        throw new Error('http ' + r.status);
+      } catch {
+        return wrap(withTimeout(db.collection('intakes').add({ ownerUid, answers: json, createdAt: now, v: 1 }), 15000));
+      }
+    },
+    longPoll,
+    enableCompat() { try { localStorage.setItem(LP_KEY, '1'); } catch { /* ignore */ } },
+    withTimeout,
     watchIntakes(uid, cb) {
       intakeUnsub?.();
       intakeUnsub = db.collection('intakes').where('ownerUid', '==', uid).onSnapshot((s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});
@@ -361,6 +391,7 @@ const Cloud = window.Cloud || { enabled: false };
 let me = null; // המשתמש המחובר (מצב ענן)
 let M = []; // בקשות השוק המשותף (מצב ענן)
 let loading = Cloud.enabled;
+let wsLoaded = false; let loadError = ''; // שמירה לענן מותרת רק אחרי שהנתונים נטענו בהצלחה
 let isAdmin = false; // מנהל (admins/{uid} ב-Firestore): רואה את כל סביבות העבודה, לקריאה בלבד
 let adminData = null; let adminUser = null;
 
@@ -399,7 +430,7 @@ const setSaveState = (st, err) => {
 addEventListener('beforeunload', (e) => { if (Cloud.enabled && (saveStatus.st === 'saving' || saveStatus.st === 'error')) { e.preventDefault(); e.returnValue = ''; } });
 const save = () => {
   if (Cloud.enabled) {
-    if (!me) return;
+    if (!me || !wsLoaded) return; // לעולם לא לשמור מצב שלא נטען מהענן
     try { localStorage.setItem(PEND + me.uid, JSON.stringify({ ts: Date.now(), data: privateState() })); } catch { /* מכסה מלאה או חסום */ }
     Cloud.queueSave(me.uid, privateState(), setSaveState); return;
   }
@@ -464,10 +495,17 @@ const VIEWS = {
 };
 function render() {
   const io = intakeOwner(); if (io) return renderIntake(io); // שאלון ציבורי ללקוח: בלי התחברות ובלי תפריט
+  if (Cloud.enabled && me && loadError) {
+    tourClear(); $('#nav').innerHTML = '';
+    $('#view').innerHTML = `<div class="card wizwrap"><h2>${esc(loadError)}</h2><p>הנתונים שלך שמורים בענן ולא נפגעו. ייתכן שהרשת, מסנן אינטרנט (נטפרי, רימון) או אנטי-וירוס חוסמים את החיבור.</p>
+    <div class="row">${Cloud.longPoll ? '' : '<button class="pri" data-do="compatMode">טען במצב תאימות</button>'}<button data-do="reload">נסה שוב</button><button class="tour-x" data-do="logout">יציאה</button></div>
+    ${Cloud.longPoll ? '<p class="muted">מצב תאימות כבר פעיל. אפשר לנסות רשת אחרת (נקודה חמה מהטלפון) או לבקש להתיר את firestore.googleapis.com במסנן.</p>' : ''}</div>`;
+    return;
+  }
   if (Cloud.enabled && (loading || !me)) {
     tourClear(); // אם התנתקו באמצע ההדרכה, לא משאירים את החלון מעל מסך הכניסה
     $('#nav').innerHTML = '';
-    $('#view').innerHTML = loading ? '<div class="empty">טוען…</div>' : loginView();
+    $('#view').innerHTML = loading ? loadingView() : loginView();
     return;
   }
   const id = (location.hash || '#dashboard').slice(1);
@@ -481,6 +519,13 @@ function render() {
 }
 const EYE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_OFF = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+let loadStart = Date.now(); // לזיהוי טעינה איטית
+function loadingView() {
+  if (Date.now() - loadStart < 10000) { setTimeout(() => { if (loading) render(); }, 10500 - (Date.now() - loadStart)); return '<div class="empty">טוען…</div>'; }
+  return `<div class="card wizwrap"><h2>הטעינה לוקחת יותר מהרגיל</h2><p>ייתכן שהרשת, מסנן אינטרנט (נטפרי, רימון) או אנטי-וירוס מעכבים את החיבור לשרת.</p>
+  <div class="row">${Cloud.longPoll ? '' : '<button class="pri" data-do="compatMode">טען במצב תאימות</button>'}<button data-do="reload">נסה שוב</button></div>
+  <p class="muted">${Cloud.longPoll ? 'מצב תאימות כבר פעיל. אם זה לא עובר, נסה רשת אחרת (למשל נקודה חמה מהטלפון) או בקש להתיר את firestore.googleapis.com במסנן.' : 'מצב תאימות משתמש בשיטת חיבור שעוברת דרך רוב המסננים. הבחירה נשמרת בדפדפן הזה.'}</p></div>`;
+}
 function loginView() {
   return `<div class="card login"><h1>כניסה למערכת</h1>
   <form id="lf"><label for="em">מייל או שם משתמש</label><input id="em" type="text" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" required>
@@ -923,6 +968,9 @@ const ACTIONS = {
     pubOwn = f; render();
   },
   pubCopy: () => { const i = $('#pf_link'); i.select(); (navigator.clipboard?.writeText(i.value) || Promise.reject()).then(() => { const b = document.querySelector('[data-do=pubCopy]'); if (b) b.textContent = 'הועתק ✓'; }).catch(() => document.execCommand?.('copy')); },
+  intakeRetry: () => { pub.owner = null; render(); },
+  compatMode: () => { Cloud.enableCompat(); location.reload(); },
+  reload: () => location.reload(),
   saveRetry: () => Cloud.retryNow(),
   logout: async () => { await Cloud.signOut(); },
   adminRefresh: () => { adminData = null; render(); },
@@ -1313,7 +1361,8 @@ function renderIntake(owner) {
   tourClear(); $('#nav').innerHTML = '';
   if (!Cloud.enabled) { $('#view').innerHTML = '<div class="card empty">השאלון זמין רק באתר המחובר לענן.</div>'; return; }
   if (pub.owner !== owner) { pub = { owner, form: undefined, done: false, sending: false }; wiz = null; Cloud.getPublicForm(owner).then((f) => { pub.form = f; render(); }); }
-  if (pub.form === undefined) { $('#view').innerHTML = '<div class="empty">טוען…</div>'; return; }
+  if (pub.form === undefined) { $('#view').innerHTML = '<div class="empty">טוען את השאלון…</div>'; return; }
+  if (pub.form && pub.form.error) { $('#view').innerHTML = `<div class="card wizwrap"><h2>לא הצלחנו לטעון את השאלון</h2><p>${esc(pub.form.error)}. ייתכן שהרשת או מסנן אינטרנט מעכבים את החיבור.</p><div class="row"><button class="pri" data-do="intakeRetry">נסה שוב</button></div></div>`; return; }
   if (!pub.form || !pub.form.enabled) { $('#view').innerHTML = '<div class="card empty"><h2>השאלון אינו זמין כרגע</h2><p>אפשר לפנות ישירות למי ששלח לך את הקישור.</p></div>'; return; }
   const url = pub.form.bookingUrl;
   if (pub.done) {
@@ -1491,28 +1540,37 @@ $('#dlg').addEventListener('close', () => { if (tour) tourRender(); });
 
 /* ---------- הפעלה ---------- */
 if (Cloud.enabled) {
+  loadStart = Date.now();
   window.addEventListener('pagehide', () => Cloud.flush());
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') Cloud.flush(); }); // מעבר לטאב אחר או נעילת מסך
   Cloud.init(async (user) => {
-    if (!user) { me = null; pubOwn = undefined; isAdmin = false; adminData = null; adminUser = null; S = empty(); M = []; tour = null; tourAutoTried = false; Cloud.stopMarket(); loading = false; return render(); }
-    me = user; loading = true; isAdmin = false; adminData = null; adminUser = null; render();
+    if (!user) { me = null; wsLoaded = false; loadError = ''; pubOwn = undefined; isAdmin = false; adminData = null; adminUser = null; S = empty(); M = []; tour = null; tourAutoTried = false; Cloud.stopMarket(); loading = false; return render(); }
+    me = user; wsLoaded = false; loadError = ''; loading = true; loadStart = Date.now(); isAdmin = false; adminData = null; adminUser = null; render();
+    let data;
     try {
-      let data = await Cloud.loadWorkspace(user.uid);
-      if (!data) { // כניסה ראשונה: מעבירים נתונים שנשמרו מקומית בדפדפן הזה, אם יש
-        data = readLocal() || {};
-        if (Object.keys(data).length) { S = Object.assign(empty(), data); save(); try { localStorage.removeItem(KEY); } catch { /* ignore */ } }
-      }
-      S = Object.assign(empty(), data);
-      const pend = readPend(user.uid); // שינויים שנעשו ולא הספיקו להישמר (רענון או סגירה מהירה, או רשת שנפלה)
-      if (pend && pend.ts > (Cloud.loadedAt || 0)) {
-        S = Object.assign(empty(), pend.data); save();
-        setTimeout(() => note('שוחזרו שינויים אחרונים שלא הספיקו להישמר בענן לפני שהדף נסגר, והם נשמרים עכשיו.'), 300);
-      } else if (pend) { try { localStorage.removeItem(PEND + user.uid); } catch { /* ignore */ } }
-      isAdmin = await Cloud.isAdmin(user.uid);
-      Cloud.watchWorkspace(user.uid, (remote) => { S = Object.assign(empty(), remote); render(); });
-      Cloud.watchRequests(user.uid, (list) => { M = list; if (location.hash === '#market') render(); });
-      Cloud.watchIntakes(user.uid, importIntakes); // שאלונים מלקוחות נכנסים אוטומטית
-    } catch (e) { note('שגיאה בטעינת הנתונים: ' + (e.message || e)); }
+      data = await Cloud.withTimeout(Cloud.loadWorkspace(user.uid), 12000);
+    } catch (e) {
+      // אין גישה לשרת: לא פותחים אפליקציה ריקה (שמירה ממנה הייתה דורסת את הנתונים בענן)
+      const conn = e.code === 'timeout' || e.code === 'unavailable' || /offline|network|unavailable/i.test(e.message || '');
+      if (conn && !Cloud.longPoll && !sessionStorage.getItem('tizon-compat-tried')) { sessionStorage.setItem('tizon-compat-tried', '1'); Cloud.enableCompat(); location.reload(); return; }
+      loadError = conn ? 'אין חיבור לשרת הנתונים' : 'שגיאה בטעינת הנתונים: ' + (e.message || e);
+      loading = false; return render();
+    }
+    wsLoaded = true; // מכאן מותר לשמור
+    if (!data) { // כניסה ראשונה: מעבירים נתונים שנשמרו מקומית בדפדפן הזה, אם יש
+      data = readLocal() || {};
+      if (Object.keys(data).length) { S = Object.assign(empty(), data); save(); try { localStorage.removeItem(KEY); } catch { /* ignore */ } }
+    }
+    S = Object.assign(empty(), data);
+    const pend = readPend(user.uid); // שינויים שנעשו ולא הספיקו להישמר (רענון או סגירה מהירה, או רשת שנפלה)
+    if (pend && pend.ts > (Cloud.loadedAt || 0)) {
+      S = Object.assign(empty(), pend.data); save();
+      setTimeout(() => note('שוחזרו שינויים אחרונים שלא הספיקו להישמר בענן לפני שהדף נסגר, והם נשמרים עכשיו.'), 300);
+    } else if (pend) { try { localStorage.removeItem(PEND + user.uid); } catch { /* ignore */ } }
+    isAdmin = await Cloud.withTimeout(Cloud.isAdmin(user.uid), 8000).catch(() => false);
+    Cloud.watchWorkspace(user.uid, (remote) => { S = Object.assign(empty(), remote); render(); });
+    Cloud.watchRequests(user.uid, (list) => { M = list; if (location.hash === '#market') render(); });
+    Cloud.watchIntakes(user.uid, importIntakes); // שאלונים מלקוחות נכנסים אוטומטית
     loading = false; render();
   });
 }
