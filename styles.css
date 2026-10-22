@@ -125,3 +125,5 @@ a.btn{display:inline-block;text-decoration:none}a.btn.pri{background:var(--pri);
 .seg label:focus-within{outline:2px solid var(--pri);outline-offset:-2px}
 @media(max-width:520px){.seg{width:100%}.seg label{flex:1;text-align:center;padding:6px 4px}}
 .seg label input,.rolecard input{width:1px;height:1px;margin:0;padding:0}
+.cgroup{margin-bottom:6px}.cg-t{font-size:13px;font-weight:600;color:var(--pri);margin:4px 0 4px}
+.cgroup .chips{margin:0}.cgroup .hint{display:none}

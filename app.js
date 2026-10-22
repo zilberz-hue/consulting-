@@ -596,8 +596,22 @@ const P_SKILLS = { expertise: 'מומחיות מקצועית', marketing: 'שי�
 const P_ARCH = { expertise: 'המומחה/ית', marketing: 'איש/ת הנראות', sales: 'בונה/ת הקשרים', ops: 'המסדר/ת', finance: 'איש/ת המספרים', people: 'המחבר/ת', tech: 'הטכנולוג/ית' };
 const P_GOALS = { clients: 'להגדיל את מספר הלקוחות / המטופלים', income: 'להגדיל הכנסה', brand: 'לבנות מותג ונראות', structure: 'לבנות מבנה עבודה מסודר', team: 'להקים צוות או שותפויות', product: 'לפתח שירות או מוצר חדש', balance: 'לשפר איזון בין עבודה לחיים', skills: 'להעמיק מקצועית' };
 const P_PHASES = [null, { label: 'שבועיים ראשונים: יסודות', days: 14 }, { label: 'עד יום 30: הקמה', days: 30 }, { label: 'עד יום 60: צמיחה', days: 60 }, { label: 'עד יום 90: סקירה והמשך', days: 90 }];
+/* התמחויות לפי Tizon CRM (אותם מפתחות כמו SPECIALTY_TO_PROMPT, כך שהפרומפטים יתאימו). "שיטות נוספות" עוד אין להן פרומפט ב-CRM. */
+const P_SPEC_GROUPS = [
+  ['רפואה סינית', [['tcm', 'רפואה סינית מסורתית'], ['acu_only', 'דיקור'], ['acu_tung', 'דיקור מאסטר טונג'], ['acu_kiiko', 'דיקור קיקו'], ['chinese_nutrition', 'תזונה סינית'], ['tuina', 'טווינא']]],
+  ['רפואה משלימה', [['herbal', 'צמחי מרפא'], ['naturopathy', 'נטורופתיה'], ['homeopathy', 'הומאופתיה']]],
+  ['תזונה וטבע', [['nutrition', 'תזונה קלינית'], ['integrative', 'רפואה אינטגרטיבית'], ['blood_tests', 'פענוח בדיקות דם'], ['lifestyle', 'אורח חיים בריא']]],
+  ['גוף ומגע', [['massage', 'עיסוי טיפולי'], ['shiatzu', 'שיאצו'], ['osteopathy', 'אוסטאופתיה'], ['reflexology', 'רפלקסולוגיה'], ['movement', 'תנועה ויוגה'], ['fitness', 'כושר ופיטנס']]],
+  ['נפש ומיינד', [['psychology', 'פסיכולוגיה'], ['nlp', 'NLP'], ['mental_coach', 'אימון מנטלי'], ['rebirthing', 'ריברסינג'], ['adhd', 'הפרעות קשב וריכוז']]],
+  ['אבחון ואנרגיה', [['iridology', 'אירידולוגיה'], ['numerology', 'נומרולוגיה']]],
+  ['יופי וטיפוח', [['cosmetics', 'קוסמטיקה'], ['pedicure', 'פדיקור / מניקור']]],
+  ['רפואה קונבנציונלית', [['doctor', 'רופא/ה']]],
+  ['שיטות נוספות', [['bach', 'פרחי באך'], ['aroma', 'ארומתרפיה'], ['reiki', 'רייקי'], ['ayurveda', 'איורוודה'], ['kinesiology', 'קינסיולוגיה'], ['craniosacral', 'קרניו-סקראל'], ['feldenkrais', 'פלדנקרייז'], ['biofeedback', 'ביופידבק']]],
+];
+const SPEC_KEY = Object.fromEntries(P_SPEC_GROUPS.flatMap(([, l]) => l.map(([k, t]) => [t, k]))); // שם ← מפתח ב-CRM
+const CRM_SPEC = new Set(P_SPEC_GROUPS.slice(0, -1).flatMap(([, l]) => l.map(([, t]) => t))); // יש להן פרומפט ב-CRM
 const P_OPT = {
-  specialties: ['חרדה ולחץ', 'דיכאון ומצב רוח', 'זוגיות', 'הורות ומשפחה', 'ילדים ונוער', 'טראומה', 'תזונה ואורח חיים', 'כאב כרוני', 'שינה', 'התמכרויות', 'פיתוח אישי וקריירה', 'ליווי עסקי'],
+  focus: ['חרדה ולחץ', 'דיכאון ומצב רוח', 'זוגיות', 'הורות ומשפחה', 'ילדים ונוער', 'טראומה', 'תזונה ואורח חיים', 'כאב כרוני', 'שינה', 'התמכרויות', 'פיתוח אישי וקריירה', 'ליווי עסקי'],
   education: ['תואר ראשון', 'תואר שני', 'דוקטורט', 'תעודה מקצועית', 'רישיון / הסמכה רשמית', 'קורסים והשתלמויות'],
   languages: ['עברית', 'אנגלית', 'ערבית', 'רוסית', 'צרפתית', 'ספרדית', 'אמהרית', 'יידיש'],
   audience: ['ילדים', 'נוער', 'מבוגרים', 'זוגות', 'משפחות', 'גיל שלישי', 'נשים', 'גברים', 'ארגונים וחברות', 'עסקים קטנים'],
@@ -751,7 +765,10 @@ function buildProfile(a, base = Date.now()) {
   // קהל, ערוצים, התמחות ושפות
   const aud = a.audience || []; const ch = a.channels || []; const spec = [...(a.specialties || []), ...(a.specialtiesOther ? [a.specialtiesOther] : [])];
   if (aud.length) add({ p: 2, ph: 3, area: 'שיווק', t: `להתאים את המסר והערוצים לקהל: ${aud.slice(0, 3).join(', ')}`, why: aud.length > 3 ? `בחרת ${aud.length} קהלים. כדאי להתחיל בשניים או שלושה.` : 'מסר שמדבר לקהל מסוים עובד טוב יותר ממסר כללי.' });
-  if (spec.length) add({ p: 2, ph: 2, area: 'שיווק', t: `לנסח הצעה ייחודית סביב ההתמחות: ${spec.slice(0, 2).join(' ו')}`, why: 'התמחות ברורה מקלה על הפניות ועל המחיר.' });
+  const focus = a.focus || [];
+  if (spec.length) add({ p: 2, ph: 2, area: 'שיווק', t: `לנסח הצעה ייחודית סביב ההתמחות: ${spec.slice(0, 2).join(' ו')}${focus.length ? ` לטיפול ב${focus.slice(0, 2).join(' ו')}` : ''}`, why: 'התמחות ברורה מקלה על הפניות ועל המחיר.' });
+  const inCrm = spec.filter((s) => CRM_SPEC.has(s));
+  if (inCrm.length) add({ p: a.role === 'therapist' ? 1 : 2, ph: 1, area: 'טייזון', t: `להגדיר ב-Tizon CRM את ההתמחות (${inCrm.slice(0, 2).join(', ')}), כדי לקבל את הפרומפטים ויומן הטיפולים המתאימים`, why: 'ה-CRM מתאים פרומפטים ושדות טיפול לכל התמחות.' });
   // רקע טכנולוגי (ואם לא נענה: לפי הערוצים, כמו באפיונים ישנים)
   const T = (k) => techLvl(a, k); const web = T('website') ?? (ch.includes('אתר') ? 2 : null);
   if (web === 0 && !(T('landing') >= 2)) add({ p: 1, ph: 2, area: 'דיגיטל', t: 'להקים אתר או דף נחיתה בסיסי (אפשר עם אתר וחנות טייזון): מי את/ה, למי זה מתאים ואיך קובעים פגישה', why: 'סימנת שאין אתר. זה המקום הראשון שבו בודקים אותך.' });
@@ -844,7 +861,9 @@ function wizView() {
     + sec('פרטי קשר', `<div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off" placeholder="050-0000000"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off" placeholder="name@example.com"')}</div>${inp('city', 'עיר / אזור', 'text', 'placeholder="לדוגמה: תל אביב"')}`)
     + sec('ניסיון וזמינות', `<div class="grid2"><div class="fld">${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div>${inp('hours', 'שעות בשבוע לבנייה ולצמיחה', 'number', 'min="0" max="80"')}</div>`);
   const many = '(אפשר לבחור כמה)';
-  if (key === 'bg') body = sec('תחומי התמחות', chips('specialties', P_OPT.specialties) + inp('specialtiesOther', 'תחום נוסף שלא ברשימה'), many)
+  const groupedChips = (k, groups) => groups.map(([g, list]) => `<div class="cgroup" role="group" aria-label="${g}"><div class="cg-t">${g}</div>${chips(k, list.map(([, t]) => t)).replace(/<p class="err hint"[^>]*><\/p>/, '')}</div>`).join('');
+  if (key === 'bg') body = sec('התמחות טיפולית', groupedChips('specialties', P_SPEC_GROUPS) + inp('specialtiesOther', 'שיטה נוספת שלא ברשימה'), many)
+    + sec('תחומי טיפול', chips('focus', P_OPT.focus), '(במה מטפלים? אפשר לבחור כמה)')
     + sec('השכלה והסמכות', chips('education', P_OPT.education) + inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)'), many)
     + sec('שפות עבודה', chips('languages', P_OPT.languages) + inp('languagesOther', 'שפה נוספת'), many);
   if (key === 'biz') body = sec('קהל יעד', chips('audience', P_OPT.audience), many)
@@ -922,7 +941,7 @@ function profileDetail(p) {
   <div class="card"><h2>איך נעבוד ביחד</h2><ul>${p.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul><p class="muted">התוכנית היא המלצה כללית לתכנון עבודה, ואינה ייעוץ משפטי, פיננסי או רפואי.</p></div>
   <details class="card details"><summary><h2>פרטים ורקע</h2> <span class="muted">(לחץ לפתיחה)</span></summary>
   ${row('טלפון', A.phone ? `<span dir="ltr">${esc(A.phone)}</span>` : '')}${row('מייל', A.email ? `<span dir="ltr">${esc(A.email)}</span>` : '')}${row('עיר / אזור', esc(A.city || ''))}${row('ניסיון', esc(A.exp || ''))}
-  ${row('התמחות', tags([...(A.specialties || []), A.specialtiesOther]))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
+  ${row('התמחות', tags([...(A.specialties || []), A.specialtiesOther]))}${row('תחומי טיפול', tags(A.focus))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
   ${row('קהל יעד', tags(A.audience))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
   ${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
   ${row('כלים דיגיטליים', P_TECH.filter(([k]) => techLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${techLvl(A, k) >= 2 ? 'ok' : techLvl(A, k) === 0 ? 'bad' : 'warn'}">${esc(t)}: ${esc(TECH_LVL[techLvl(A, k)])}</span>`).join(' '))}${row('אפליקציות טייזון', TIZON_APPS.filter(([k]) => appLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${appLvl(A, k) >= 2 ? 'ok' : ''}">${esc(t)}: ${esc(APP_LVL[appLvl(A, k)])}</span>`).join(' '))}${row('נוחות עם טכנולוגיה', A.techComfort ? esc(A.techComfort) + ' / 5' : '')}${row('חסמים', tags(A.barriers))}${row('תמיכה מבוקשת', tags(A.support))}${row('מוכנות', A.readiness ? esc(A.readiness) + ' / 10' : '')}${row('התחלה', esc(A.start || ''))}</details>`;
