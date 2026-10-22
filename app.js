@@ -596,17 +596,19 @@ const P_SKILLS = { expertise: 'מומחיות מקצועית', marketing: 'שי�
 const P_ARCH = { expertise: 'המומחה/ית', marketing: 'איש/ת הנראות', sales: 'בונה/ת הקשרים', ops: 'המסדר/ת', finance: 'איש/ת המספרים', people: 'המחבר/ת', tech: 'הטכנולוג/ית' };
 const P_GOALS = { clients: 'להגדיל את מספר הלקוחות / המטופלים', income: 'להגדיל הכנסה', brand: 'לבנות מותג ונראות', structure: 'לבנות מבנה עבודה מסודר', team: 'להקים צוות או שותפויות', product: 'לפתח שירות או מוצר חדש', balance: 'לשפר איזון בין עבודה לחיים', skills: 'להעמיק מקצועית' };
 const P_PHASES = [null, { label: 'שבועיים ראשונים: יסודות', days: 14 }, { label: 'עד יום 30: הקמה', days: 30 }, { label: 'עד יום 60: צמיחה', days: 60 }, { label: 'עד יום 90: סקירה והמשך', days: 90 }];
-/* התמחויות לפי Tizon CRM (אותם מפתחות כמו SPECIALTY_TO_PROMPT, כך שהפרומפטים יתאימו). "שיטות נוספות" עוד אין להן פרומפט ב-CRM. */
+/* התמחויות לפי Tizon CRM: איחוד של התמחויות המטפלים (SPEC_LABEL) וסוגי הפרומפטים (aiPromptType / ADV_PROMPTS), עם אותם מפתחות.
+   "שיטות נוספות" (הקבוצה האחרונה) עוד אין להן פרומפט ב-CRM. */
 const P_SPEC_GROUPS = [
-  ['רפואה סינית', [['tcm', 'רפואה סינית מסורתית'], ['acu_only', 'דיקור'], ['acu_tung', 'דיקור מאסטר טונג'], ['acu_kiiko', 'דיקור קיקו'], ['chinese_nutrition', 'תזונה סינית'], ['tuina', 'טווינא']]],
-  ['רפואה משלימה', [['herbal', 'צמחי מרפא'], ['naturopathy', 'נטורופתיה'], ['homeopathy', 'הומאופתיה']]],
-  ['תזונה וטבע', [['nutrition', 'תזונה קלינית'], ['integrative', 'רפואה אינטגרטיבית'], ['blood_tests', 'פענוח בדיקות דם'], ['lifestyle', 'אורח חיים בריא']]],
-  ['גוף ומגע', [['massage', 'עיסוי טיפולי'], ['shiatzu', 'שיאצו'], ['osteopathy', 'אוסטאופתיה'], ['reflexology', 'רפלקסולוגיה'], ['movement', 'תנועה ויוגה'], ['fitness', 'כושר ופיטנס']]],
-  ['נפש ומיינד', [['psychology', 'פסיכולוגיה'], ['nlp', 'NLP'], ['mental_coach', 'אימון מנטלי'], ['rebirthing', 'ריברסינג'], ['adhd', 'הפרעות קשב וריכוז']]],
+  ['רפואה סינית', [['tcm', 'רפואה סינית מסורתית'], ['acu_only', 'דיקור'], ['acu_tung', 'דיקור מאסטר טונג'], ['acu_kiiko', 'דיקור קיקו (יפני)'], ['chinese_nutrition', 'תזונה סינית'], ['tuina', 'טווינא']]],
+  ['רפואה משלימה וטבעית', [['herbal', 'צמחי מרפא'], ['naturopathy', 'נטורופתיה'], ['homeopathy', 'הומאופתיה'], ['bach_flowers', 'פרחי באך'], ['reiki', 'רייקי'], ['access_bars', 'אקסס בארס'], ['bio_orgonomy', 'ביו-אורגונומי']]],
+  ['תזונה ואורח חיים', [['nutrition', 'תזונה קלינית'], ['integrative', 'רפואה אינטגרטיבית'], ['blood_tests', 'פענוח בדיקות דם'], ['lifestyle', 'אורח חיים בריא']]],
+  ['גוף ומגע', [['massage', 'עיסוי טיפולי'], ['shiatzu', 'שיאצו'], ['osteopathy', 'אוסטאופתיה'], ['reflexology', 'רפלקסולוגיה'], ['emotional_ortho', 'אורתופדיה רגשית'], ['sports_therapy', 'ספורתרפיה'], ['movement', 'תנועה ויוגה'], ['fitness', 'כושר ופיטנס']]],
+  ['נפש ורגש', [['psychology', 'פסיכולוגיה'], ['cbt', 'CBT (קוגניטיבי-התנהגותי)'], ['trauma_emdr', 'טיפול בטראומה (EMDR / EFT)'], ['nlp', 'NLP'], ['mental_coach', 'אימון מנטלי'], ['rebirthing', 'ריברסינג'], ['addiction_recovery', 'גמילה מהתמכרויות'], ['sleep_consult', 'ייעוץ שינה']]],
+  ['ילדים, נוער ומשפחה', [['adhd', 'הפרעות קשב וריכוז'], ['autism_support', 'תמיכה באוטיזם (רצף)'], ['parent_guidance', 'הדרכת הורים'], ['youth_coaching', 'אימון אישי לנוער'], ['couple_numerology', 'אבחון זוגי והתאמה']]],
   ['אבחון ואנרגיה', [['iridology', 'אירידולוגיה'], ['numerology', 'נומרולוגיה']]],
   ['יופי וטיפוח', [['cosmetics', 'קוסמטיקה'], ['pedicure', 'פדיקור / מניקור']]],
   ['רפואה קונבנציונלית', [['doctor', 'רופא/ה']]],
-  ['שיטות נוספות', [['bach', 'פרחי באך'], ['aroma', 'ארומתרפיה'], ['reiki', 'רייקי'], ['ayurveda', 'איורוודה'], ['kinesiology', 'קינסיולוגיה'], ['craniosacral', 'קרניו-סקראל'], ['feldenkrais', 'פלדנקרייז'], ['biofeedback', 'ביופידבק']]],
+  ['שיטות נוספות', [['aroma', 'ארומתרפיה'], ['ayurveda', 'איורוודה'], ['kinesiology', 'קינסיולוגיה'], ['craniosacral', 'קרניו-סקראל'], ['feldenkrais', 'פלדנקרייז'], ['biofeedback', 'ביופידבק']]],
 ];
 const SPEC_KEY = Object.fromEntries(P_SPEC_GROUPS.flatMap(([, l]) => l.map(([k, t]) => [t, k]))); // שם ← מפתח ב-CRM
 const CRM_SPEC = new Set(P_SPEC_GROUPS.slice(0, -1).flatMap(([, l]) => l.map(([, t]) => t))); // יש להן פרומפט ב-CRM
