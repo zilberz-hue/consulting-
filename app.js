@@ -644,7 +644,7 @@ const P_OPT = {
   focus: ['חרדה ולחץ', 'דיכאון ומצב רוח', 'זוגיות', 'הורות ומשפחה', 'ילדים ונוער', 'טראומה', 'תזונה ואורח חיים', 'כאב כרוני', 'שינה', 'התמכרויות', 'פיתוח אישי וקריירה', 'ליווי עסקי'],
   education: ['תואר ראשון', 'תואר שני', 'דוקטורט', 'תעודה מקצועית / הסמכה', 'רישיון / הסמכה רשמית', 'קורסים והשתלמויות'],
   languages: ['עברית', 'אנגלית', 'ערבית', 'רוסית', 'צרפתית', 'ספרדית', 'אמהרית', 'יידיש'],
-  audience: ['ילדים', 'נוער', 'מבוגרים', 'זוגות', 'משפחות', 'גיל שלישי', 'נשים', 'גברים', 'ארגונים וחברות', 'עסקים קטנים'],
+  audience: ['ילדים', 'נוער', 'מבוגרים', 'זוגות', 'משפחות', 'גיל שלישי', 'נשים', 'גברים', 'ארגונים וחברות', 'עסקים קטנים', 'אחר'],
   channels: ['אינסטגרם', 'פייסבוק', 'טיקטוק', 'לינקדאין', 'יוטיוב', 'וואטסאפ עסקי', 'פרופיל גוגל עסקי', 'ניוזלטר', 'הרצאות וכנסים', 'קבוצות וקהילות'],
   budget: ['עד 1,000 ₪', '1,000 עד 5,000 ₪', '5,000 עד 20,000 ₪', 'מעל 20,000 ₪'],
   values: ['מקצועיות', 'חופש', 'יציבות', 'השפעה ושליחות', 'צמיחה', 'משפחה', 'יצירתיות', 'יושרה', 'קהילה'],
@@ -653,6 +653,7 @@ const P_OPT = {
   learning: ['קריאה', 'וידאו', 'ליווי אישי', 'סדנה קבוצתית', 'תוך כדי עשייה'],
   barriers: ['זמן', 'כסף', 'ביטחון עצמי', 'ידע', 'טכנולוגיה', 'משפחה ואיזון', 'בריאות', 'בדידות / אין עם מי להתייעץ'],
   support: ['ליווי שבועי', 'סדנאות', 'תבניות ומסמכים', 'עזרה בשיווק', 'עזרה בטכנולוגיה', 'נטוורקינג וחיבורים'],
+  digital: ['קורס אונליין', 'סדנה מוקלטת', 'ספר / מדריך דיגיטלי', 'תוכנית ליווי אונליין', 'מנוי / קהילה בתשלום', 'וובינר בתשלום', 'אפליקציה / כלי דיגיטלי'],
   start: ['מיד', 'תוך שבועיים', 'תוך חודש', 'בעוד יותר מחודש'],
 };
 const P_ROLE_DESC = { founder: 'מקים/ה או מוביל/ה עסק', partner: 'שותף/ה בעסק או במיזם', therapist: 'עובד/ת מול מטופלים', other: 'תפקיד אחר: כתוב/י במילים שלך' };
@@ -793,6 +794,10 @@ function buildProfile(a, base = Date.now()) {
   }
   const bud = a.budget || '';
   if (bud === 'מעל 20,000 ₪' || bud === '5,000 עד 20,000 ₪') add({ p: 2, ph: 3, area: 'שיווק', t: 'להשקיע חלק מהתקציב בקמפיין ממוקד או באיש מקצוע חיצוני, ולמדוד עלות לליד', why: `התקציב שציינת: ${bud}.` });
+  // מוצרים דיגיטליים ופורמולות / תוספי תזונה
+  const dig = a.digital || [];
+  if (num(a.digitalTarget)) add({ p: 2, ph: 3, area: 'מוצרים דיגיטליים', t: dig.length ? `להשיק או לשפר את ה${dig[0]}: מחיר, דף מכירה ותהליך הצטרפות אוטומטי` : 'לבחור מוצר דיגיטלי ראשון (קורס, סדנה מוקלטת או מדריך), לבנות דף מכירה ולהשיק', why: `יעד מכירות דיגיטליות: ${money(a.digitalTarget)} בחודש. מוצר דיגיטלי מוכר גם כשאין זמן פנוי ביומן.` });
+  if (num(a.supplementsTarget)) add({ p: 2, ph: 2, area: 'מכירות', t: 'לבחור 3 פורמולות / תוספים מובילים, לקבוע מחיר ומלאי, ולהמליץ עליהם בסיום טיפול', why: `יעד מכירות פורמולות ותוספים: ${money(a.supplementsTarget)} בחודש.` });
   // קהל, ערוצים, התמחות ושפות
   const aud = a.audience || []; const ch = a.channels || []; const spec = [...(a.specialties || []), ...(a.specialtiesOther ? [a.specialtiesOther] : [])];
   if (aud.length) add({ p: 2, ph: 3, area: 'שיווק', t: `להתאים את המסר והערוצים לקהל: ${aud.slice(0, 3).join(', ')}`, why: aud.length > 3 ? `בחרת ${aud.length} קהלים. כדאי להתחיל בשניים או שלושה.` : 'מסר שמדבר לקהל מסוים עובד טוב יותר ממסר כללי.' });
@@ -855,7 +860,7 @@ function buildProfile(a, base = Date.now()) {
   const using = TIZON_APPS.filter(([k]) => appLvl(a, k) === 3).map((x) => x[1]); if (using.length) notes.push(`כלי טייזון שכבר בשימוש קבוע: ${using.join(', ')}. נבנה עליהם.`);
   if (times.length) notes.push(`זמני עבודה מועדפים: ${times.join(', ')}. פגישות קבועות ייקבעו בזמנים האלה.`);
   const startDays = P_START_DAYS[a.start] || 0;
-  const kpis = [inc1 ? `הכנסה חודשית: ${money(inc0)} ← ${money(inc1)}` : '', num(a.clientsTarget) ? `לקוחות / מטופלים חדשים בחודש: ${num(a.clientsTarget)}` : '', num(a.hoursTarget) ? `שעות עבודה בשבוע: ${num(a.hoursTarget)}` : '', a.role === 'therapist' && num(a.target) ? `מטופלים בשבוע: ${num(a.load)} ← ${num(a.target)}` : ''].filter(Boolean);
+  const kpis = [inc1 ? `הכנסה חודשית: ${money(inc0)} ← ${money(inc1)}` : '', num(a.clientsTarget) ? `לקוחות / מטופלים חדשים בחודש: ${num(a.clientsTarget)}` : '', num(a.hoursTarget) ? `שעות עבודה בשבוע: ${num(a.hoursTarget)}` : '', num(a.digitalTarget) ? `מוצרים דיגיטליים: ${money(a.digitalTarget)} בחודש` : '', num(a.supplementsTarget) ? `פורמולות / תוספי תזונה: ${money(a.supplementsTarget)} בחודש` : '', a.role === 'therapist' && num(a.target) ? `מטופלים בשבוע: ${num(a.load)} ← ${num(a.target)}` : ''].filter(Boolean);
   return { role: a.role, archetype: P_ARCH[top.k], ranked, low: low.map((s) => s.k), top: top.k, plan, more, notes: notes.filter(Boolean), kpis, createdAt: base, startAt: base + startDays * 864e5 };
 }
 
@@ -892,24 +897,25 @@ function wizView() {
     + sec('פרטי קשר', `<div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off" placeholder="050-0000000"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off" placeholder="name@example.com"')}</div>${inp('city', 'עיר / אזור', 'text', 'placeholder="לדוגמה: תל אביב"')}`)
     + sec('ניסיון וזמינות', `<div class="grid2"><div class="fld">${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div>${inp('hours', 'שעות בשבוע להתפתחות אישית', 'number', 'min="0" max="80"')}</div>`);
   const many = '(אפשר לבחור כמה)';
-  const specDet = (list) => list.filter(([, t]) => SPEC_DETAIL[t]).map(([, t]) => { const [f, l, ph] = SPEC_DETAIL[t]; return `<div data-for="${esc(t)}" ${(d.specialties || []).includes(t) ? '' : 'hidden'}>${inp(f, l, 'text', `maxlength="80" placeholder="${ph}"`)}</div>`; }).join('');
+  const specDet = (list) => list.filter(([, t]) => SPEC_DETAIL[t]).map(([, t]) => { const [f, l, ph] = SPEC_DETAIL[t]; return `<div data-for="${esc(t)}" data-fk="specialties" ${(d.specialties || []).includes(t) ? '' : 'hidden'}>${inp(f, l, 'text', `maxlength="80" placeholder="${ph}"`)}</div>`; }).join('');
   const groupedChips = (k, groups) => groups.map(([g, list]) => `<div class="cgroup" role="group" aria-label="${g}"><div class="cg-t">${g}</div>${chips(k, list.map(([, t]) => t)).replace(/<p class="err hint"[^>]*><\/p>/, '')}${k === 'specialties' ? specDet(list) : ''}</div>`).join('');
   if (key === 'bg') body = sec('התמחות טיפולית', groupedChips('specialties', P_SPEC_GROUPS) + inp('specialtiesOther', 'שיטה נוספת שלא ברשימה'), many)
     + sec('תחומי טיפול', chips('focus', P_OPT.focus), '(במה מטפלים? אפשר לבחור כמה)')
     + sec('השכלה והסמכות', chips('education', P_OPT.education) + inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)'), many)
     + sec('שפות עבודה', chips('languages', P_OPT.languages) + inp('languagesOther', 'שפה נוספת'), many);
-  if (key === 'biz') body = sec('קהל יעד', chips('audience', P_OPT.audience), many)
+  if (key === 'biz') body = sec('קהל יעד', chips('audience', P_OPT.audience) + `<div data-for="אחר" data-fk="audience" ${(d.audience || []).includes('אחר') ? '' : 'hidden'}>${inp('audienceOther', 'קהל יעד אחר', 'text', 'maxlength="120" placeholder="לדוגמה: ספורטאים, נשים בהריון"')}</div>`, many)
     + sec('ערוצים וכלים שכבר בשימוש', chips('channels', P_OPT.channels), many)
-    + sec('מספרים', `<div class="grid3">${inp('incomeNow', 'הכנסה חודשית היום (₪)', 'number', 'min="0" placeholder="0"')}${inp('incomeTarget', 'יעד הכנסה חודשית (₪)', 'number', 'min="0" placeholder="0"')}${inp('price', 'מחיר לפגישה / שירות (₪)', 'number', 'min="0" placeholder="0"')}</div>`, '(לא חובה, אבל עוזר לחשב את התוכנית)')
-    + sec('תקציב להשקעה', `<div class="fld">${lab('ברבעון הקרוב')}${sel('budget', P_OPT.budget)}</div>`);
+    + sec('מספרים', `<div class="grid3">${inp('incomeNow', 'הכנסה חודשית היום (₪)', 'number', 'min="0" placeholder="0"')}${inp('incomeTarget', 'יעד הכנסה חודשית (₪)', 'number', 'min="0" placeholder="0"')}${inp('price', 'מחיר לפגישה / שירות (₪)', 'number', 'min="0" placeholder="0"')}</div>`, '(לא חובה, אבל עוזר לחשב את התוכנית)');
   /* שורה עם סולם שלבים (כפתורי בחירה) */
   const seg = (field, levels, title, desc = '') => `<div class="techrow"><div class="tr-name"><b>${title}</b>${desc ? `<span class="muted">${desc}</span>` : ''}</div><div class="seg" role="radiogroup" aria-label="${esc(title)}">${levels.map((l, i) => `<label class="${String(d[field]) === String(i) ? 'on' : ''}"><input type="radio" name="${field}" data-w="${field}" value="${i}" ${String(d[field]) === String(i) ? 'checked' : ''}>${l}</label>`).join('')}</div></div>`;
   if (key === 'tech') body = sec('כלים ותשתית דיגיטלית', `<p class="muted" style="margin:0 0 6px">לכל שורה: באיזה שלב זה אצלך היום? אפשר לדלג על מה שלא רלוונטי.</p>${P_TECH.map(([k, t]) => seg('tech_' + k, TECH_LVL, t)).join('')}`)
     + sec('האפליקציות והחידושים של טייזון', `${TIZON_APPS.map(([k, t, dsc]) => seg('app_' + k, APP_LVL, t, dsc)).join('')}`, '(מה כבר מוכר לך?)')
     + sec('נוחות עם טכנולוגיה', `<div class="q"><span>עד כמה נוח לך עם כלים דיגיטליים? (1 עד 5)</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="techComfort" value="${d.techComfort || 3}" aria-label="נוחות עם טכנולוגיה"><output>${d.techComfort || 3}</output></span></div>`);
-  if (key === 'goals') body = sec('מטרות מרכזיות', `<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" data-max="6" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>`, '(עד שש)')
+  if (key === 'goals') body = sec('מטרות מרכזיות', `<div class="chips">${Object.entries(P_GOALS).map(([k, v]) => `<label class="chip"><input type="checkbox" data-wg="goals" value="${k}" ${(d.goals || []).includes(k) ? 'checked' : ''}> ${v}</label>`).join('')}</div><p class="err hint" id="hint_goals" role="alert"></p>`, many)
     + sec('איך נראית הצלחה בעוד 90 יום?', tx('success', 'במילים שלך'))
-    + sec('יעדים במספרים', `<div class="grid2">${inp('clientsTarget', 'לקוחות / מטופלים חדשים בחודש', 'number', 'min="0" placeholder="0"')}${inp('hoursTarget', 'שעות עבודה בשבוע', 'number', 'min="0" max="80" placeholder="0"')}</div>`, '(לא חובה)');
+    + sec('יעדים במספרים', `<div class="grid2">${inp('clientsTarget', 'לקוחות / מטופלים חדשים בחודש', 'number', 'min="0" placeholder="0"')}${inp('hoursTarget', 'שעות עבודה בשבוע', 'number', 'min="0" max="80" placeholder="0"')}</div>
+      <div class="grid2">${inp('digitalTarget', 'מכירות מוצרים דיגיטליים בחודש (₪)', 'number', 'min="0" placeholder="0"')}${inp('supplementsTarget', 'מכירות פורמולות / תוספי תזונה בחודש (₪)', 'number', 'min="0" placeholder="0"')}</div>
+      ${lab('אילו מוצרים דיגיטליים יש או מתוכננים?', many)}${chips('digital', P_OPT.digital)}`, '(לא חובה)');
   if (key === 'skills') body = sec('דירוג עצמי', `<p class="muted" style="margin:0 0 6px">מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`);
   if (key === 'style') body = sec('איך את/ה עובד/ת', `<div class="grid3"><div class="fld">${lab('קצב עבודה')}${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}</div><div class="fld">${lab('קבלת החלטות')}${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}</div><div class="fld">${lab('תקשורת מועדפת')}${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}</div></div>`)
     + sec('ערכים מובילים', chips('values', P_OPT.values, 3), '(עד שלושה)')
@@ -951,7 +957,7 @@ document.addEventListener('input', (ev) => {
     const cur = new Set(wiz.data[k] || []);
     if (t.checked) { if (max && cur.size >= max) { t.checked = false; if (h) h.textContent = `אפשר לבחור עד ${max}`; return; } cur.add(t.value); } else cur.delete(t.value);
     wiz.data[k] = [...cur]; if (h) h.textContent = '';
-    if (k === 'specialties') document.querySelectorAll('[data-for]').forEach((el) => { if (el.dataset.for === t.value) el.hidden = !t.checked; });
+    document.querySelectorAll(`[data-fk="${k}"]`).forEach((el) => { if (el.dataset.for === t.value) { el.hidden = !t.checked; if (t.checked) el.querySelector('input')?.focus(); } }); // שדה פירוט שנפתח ליד אפשרות
   } else if (t.dataset.w) {
     wiz.data[t.dataset.w] = t.value; if (t.type === 'range') t.nextElementSibling.textContent = t.value;
     if (t.name === 'role') { document.querySelectorAll('.rolecard').forEach((c) => c.classList.toggle('on', c.contains(t))); const ob = $('#roleOtherBox'); if (ob) { ob.hidden = t.value !== 'other'; if (!ob.hidden) $('#w_roleOther')?.focus(); } }
@@ -1039,8 +1045,8 @@ function profileDetail(p) {
   <details class="card details"><summary><h2>פרטים ורקע</h2> <span class="muted">(לחץ לפתיחה)</span></summary>
   ${row('תאריך לידה', esc(birthText(A.birth)))}${row('טלפון', A.phone ? `<span dir="ltr">${esc(A.phone)}</span>` : '')}${row('מייל', A.email ? `<span dir="ltr">${esc(A.email)}</span>` : '')}${row('עיר / אזור', esc(A.city || ''))}${row('ניסיון', esc(A.exp || ''))}
   ${row('התמחות', tags(specTags(A)))}${row('תחומי טיפול', tags(A.focus))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
-  ${row('קהל יעד', tags(A.audience))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
-  ${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
+  ${row('קהל יעד', tags((A.audience || []).map((x) => (x === 'אחר' && (A.audienceOther || '').trim() ? `אחר: ${A.audienceOther.trim()}` : x))))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
+  ${row('מוצרים דיגיטליים', tags(A.digital))}${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
   ${row('כלים דיגיטליים', P_TECH.filter(([k]) => techLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${techLvl(A, k) >= 2 ? 'ok' : techLvl(A, k) === 0 ? 'bad' : 'warn'}">${esc(t)}: ${esc(TECH_LVL[techLvl(A, k)])}</span>`).join(' '))}${row('אפליקציות טייזון', TIZON_APPS.filter(([k]) => appLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${appLvl(A, k) >= 2 ? 'ok' : ''}">${esc(t)}: ${esc(APP_LVL[appLvl(A, k)])}</span>`).join(' '))}${row('נוחות עם טכנולוגיה', A.techComfort ? esc(A.techComfort) + ' / 5' : '')}${row('חסמים', tags(A.barriers))}${row('תמיכה מבוקשת', tags(A.support))}${row('מוכנות', A.readiness ? esc(A.readiness) + ' / 10' : '')}${row('התחלה', esc(A.start || ''))}</details>`;
 }
 
