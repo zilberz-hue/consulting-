@@ -635,8 +635,9 @@ const P_SPEC_GROUPS = [ // מפתח שמתחיל ב-x_ = אין לו (עדיין
 const SPEC_DETAIL = { 'רופא/ה': ['doctorSpec', 'התמחות הרופא/ה', 'לדוגמה: רפואת משפחה, גינקולוגיה'], 'אח/ות': ['nurseSpec', 'התמחות האח/ות', 'לדוגמה: טיפול נמרץ, בריאות האישה'] };
 /* שמות שהשתנו: תשובות ישנות ממשיכות להופיע מסומנות */
 const SPEC_RENAMED = { 'צמחי מרפא': 'צמחי מרפא מערביים', 'פענוח בדיקות דם': 'פיענוח בדיקות דם', 'כושר ופיטנס': 'אימון כושר אישי', 'תנועה ויוגה': 'יוגה' };
+const FUND_RENAMED = { 'משקיע': 'משקיע / אנג׳ל', 'הלוואה / מימון חיצוני': 'הלוואה בנקאית' };
 const EDU_RENAMED = { 'תעודה מקצועית': 'תעודה מקצועית / הסמכה' };
-const specFix = (a) => { if (Array.isArray(a?.specialties)) a.specialties = [...new Set(a.specialties.map((x) => SPEC_RENAMED[x] || x))]; if (Array.isArray(a?.education)) a.education = [...new Set(a.education.map((x) => EDU_RENAMED[x] || x))]; return a; };
+const specFix = (a) => { if (Array.isArray(a?.specialties)) a.specialties = [...new Set(a.specialties.map((x) => SPEC_RENAMED[x] || x))]; if (a && typeof a.funding === 'string') a.funding = a.funding ? [a.funding] : []; if (Array.isArray(a?.funding)) a.funding = a.funding.map((x) => FUND_RENAMED[x] || x); if (Array.isArray(a?.education)) a.education = [...new Set(a.education.map((x) => EDU_RENAMED[x] || x))]; return a; };
 const specTags = (A) => [...(A.specialties || []).map((x) => (SPEC_DETAIL[x] && (A[SPEC_DETAIL[x][0]] || '').trim() ? `${x}: ${A[SPEC_DETAIL[x][0]].trim()}` : x)), A.specialtiesOther];
 const SPEC_KEY = Object.fromEntries(P_SPEC_GROUPS.flatMap(([, l]) => l.map(([k, t]) => [t, k]))); // שם ← מפתח ב-CRM
 const CRM_SPEC = new Set(P_SPEC_GROUPS.flatMap(([, l]) => l.filter(([k]) => !k.startsWith('x_')).map(([, t]) => t))); // יש להן פרומפט ב-CRM
@@ -683,7 +684,7 @@ const P_ROLE_Q = {
   founder: [
     { k: 'stage', label: 'באיזה שלב העסק?', opts: ['רעיון', 'בהקמה', 'פועל עד שנה', 'פועל מעל שנה'] },
     { k: 'teamSize', label: 'כמה אנשים בצוות כרגע (כולל אותך)?', type: 'number', def: 1 },
-    { k: 'funding', label: 'ממה ממומן העסק?', opts: ['הון עצמי', 'שותפים', 'משקיע', 'הלוואה / מימון חיצוני'] },
+    { k: 'funding', label: 'ממה ממומן העסק?', multi: true, other: 'מקור מימון אחר', opts: ['הון עצמי', 'הכנסות מהעסק', 'שותפים', 'משקיע / אנג׳ל', 'הלוואה בנקאית', 'קרן או מענק ממשלתי', 'מימון המונים', 'משפחה וחברים', 'אחר'] },
     { k: 'bottleneck', label: 'מה הצוואר בקבוק העיקרי היום?', opts: ['חוסר בלקוחות', 'כסף', 'זמן', 'צוות', 'ידע מקצועי', 'בהירות לגבי הכיוון'] },
   ],
   partner: [
@@ -926,7 +927,8 @@ function wizView() {
     + sec('מוכנות והתחלה', `<div class="q"><span>עד כמה את/ה מוכן/ה להתחיל עכשיו? (1 עד 10)</span><span class="rate"><input type="range" min="1" max="10" step="1" data-w="readiness" value="${d.readiness || 7}" aria-label="מוכנות"><output>${d.readiness || 7}</output></span></div><div class="fld" style="margin-top:8px">${lab('מתי אפשר להתחיל?')}${sel('start', P_OPT.start)}</div>`);
   if (key === 'role') {
     P_ROLE_Q[d.role].forEach((q) => { if (q.type === 'number' && d[q.k] === undefined) d[q.k] = String(q.def ?? 0); });
-    const f = (q) => (q.opts ? `<div class="fld">${lab(q.label)}${sel(q.k, q.opts)}</div>` : inp(q.k, q.label, q.type || 'text', q.type === 'number' ? 'min="0"' : ''));
+    const f = (q) => (q.multi ? `<div class="fld">${lab(q.label, many)}${chips(q.k, q.opts)}${q.other ? `<div data-for="אחר" data-fk="${q.k}" ${(d[q.k] || []).includes('אחר') ? '' : 'hidden'}>${inp(q.k + 'Other', q.other, 'text', 'maxlength="120"')}</div>` : ''}</div>`
+      : q.opts ? `<div class="fld">${lab(q.label)}${sel(q.k, q.opts)}</div>` : inp(q.k, q.label, q.type || 'text', q.type === 'number' ? 'min="0"' : ''));
     const qs = P_ROLE_Q[d.role]; const nums = qs.filter((q) => q.type === 'number'); const rest = qs.filter((q) => q.type !== 'number');
     body = sec(d.role === 'other' ? 'שאלות על העבודה שלך' : `שאלות ל${P_ROLES[d.role]}`, `${rest.map(f).join('')}${nums.length ? `<div class="grid2">${nums.map(f).join('')}</div>` : ''}`, '(כמעט סיימנו)');
   }
@@ -1046,7 +1048,7 @@ function profileDetail(p) {
   ${row('תאריך לידה', esc(birthText(A.birth)))}${row('טלפון', A.phone ? `<span dir="ltr">${esc(A.phone)}</span>` : '')}${row('מייל', A.email ? `<span dir="ltr">${esc(A.email)}</span>` : '')}${row('עיר / אזור', esc(A.city || ''))}${row('ניסיון', esc(A.exp || ''))}
   ${row('התמחות', tags(specTags(A)))}${row('תחומי טיפול', tags(A.focus))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
   ${row('קהל יעד', tags((A.audience || []).map((x) => (x === 'אחר' && (A.audienceOther || '').trim() ? `אחר: ${A.audienceOther.trim()}` : x))))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
-  ${row('מוצרים דיגיטליים', tags(A.digital))}${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
+  ${(P_ROLE_Q[p.role] || []).map((q) => { const v = A[q.k]; const list = Array.isArray(v) ? v.map((x) => (x === 'אחר' && (A[q.k + 'Other'] || '').trim() ? `אחר: ${A[q.k + 'Other'].trim()}` : x)) : (typeof v === 'string' && q.multi ? [v] : null); return row(q.label.replace(/\?$/, ''), list ? tags(list) : esc(v ?? '')); }).join('')}${row('מוצרים דיגיטליים', tags(A.digital))}${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
   ${row('כלים דיגיטליים', P_TECH.filter(([k]) => techLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${techLvl(A, k) >= 2 ? 'ok' : techLvl(A, k) === 0 ? 'bad' : 'warn'}">${esc(t)}: ${esc(TECH_LVL[techLvl(A, k)])}</span>`).join(' '))}${row('אפליקציות טייזון', TIZON_APPS.filter(([k]) => appLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${appLvl(A, k) >= 2 ? 'ok' : ''}">${esc(t)}: ${esc(APP_LVL[appLvl(A, k)])}</span>`).join(' '))}${row('נוחות עם טכנולוגיה', A.techComfort ? esc(A.techComfort) + ' / 5' : '')}${row('חסמים', tags(A.barriers))}${row('תמיכה מבוקשת', tags(A.support))}${row('מוכנות', A.readiness ? esc(A.readiness) + ' / 10' : '')}${row('התחלה', esc(A.start || ''))}</details>`;
 }
 
