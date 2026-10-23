@@ -8,6 +8,7 @@ import base64, os, re, shutil
 
 read = lambda p: open(p, encoding='utf-8').read()
 css, js, cloud, cfg = read('styles.css'), read('app.js'), read('cloud.js'), read('firebase-config.js')
+VERSION = open('VERSION', encoding='utf-8').read().strip()  # מוצג בתחתית הדף, כדי לדעת איזו גרסה נטענה
 logo = base64.b64encode(open('logo.png', 'rb').read()).decode()
 has_cfg = bool(re.search(r'^window\.FIREBASE_CONFIG\s*=\s*\{', cfg, re.M))
 SDK_NAMES = ('app', 'auth', 'firestore')
@@ -24,7 +25,8 @@ setTimeout(function(){show('ייתכן שסינון אינטרנט, אנטי-ו�
 
 body_html = f'''<header class="top"><strong class="brand"><img class="logo" alt="TizonHealth" src="data:image/png;base64,{logo}"><span>טייזון – היועץ העסקי שלך<small>The Architecture of Vitality</small></span></strong><nav id="nav"></nav></header>
 <main id="view"><div class="card empty" id="boot">טוען…</div></main>
-<dialog id="dlg"></dialog>'''
+<dialog id="dlg"></dialog>
+<footer class="ver no-print">טייזון – היועץ העסקי שלך · גרסה {VERSION}</footer>'''
 
 def page(with_cloud, sdk=SDK_CDN):
     scripts = BOOT
