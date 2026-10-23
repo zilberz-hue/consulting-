@@ -553,7 +553,7 @@ const ACTIONS = {
   profOpen: (id) => { profOpen = id; const p = by(S.profiles, id); if (p?.isNew) { delete p.isNew; save(); } render(); scrollTo(0, 0); },
   profBack: () => { profOpen = null; render(); },
   profSend: (id) => { const p = by(S.profiles, id); if (p) sendDialog(p); },
-  profEdit: (id) => { wiz = { step: 0, data: JSON.parse(JSON.stringify(by(S.profiles, id).answers)), editId: id }; profOpen = null; render(); scrollTo(0, 0); },
+  profEdit: (id) => { wiz = { step: 0, data: specFix(JSON.parse(JSON.stringify(by(S.profiles, id).answers))), editId: id }; profOpen = null; render(); scrollTo(0, 0); },
   profDel: (id) => ask('למחוק את האפיון והתוכנית? משימות שכבר נוצרו מהתוכנית יישארו.', () => { S.profiles = S.profiles.filter((x) => x.id !== id); if (profOpen === id) profOpen = null; save(); render(); }),
   profMore: (id, d) => { const p = by(S.profiles, id); const x = by(p.more || [], d.mid); if (!x) return; p.more = p.more.filter((m) => m !== x); p.plan.push(x); p.plan.sort((m, n) => m.phase - n.phase); save(); render(); },
   profTasks: (id) => { // משימה לכל שלב, עם תתי-משימות ותאריכי יעד
@@ -610,27 +610,35 @@ const ACTIONS = {
   reset: () => ask('למחוק את כל הנתונים?', () => { S = empty(); save(); render(); }),
 };
 /* ---------- אפיון אישי: שאלון לפי תפקיד ← תוכנית אישית ל-90 יום ← משימות ---------- */
-const P_ROLES = { founder: 'מייסד/ת', partner: 'שותף/ה', therapist: 'מטפל/ת' };
+const P_ROLES = { founder: 'מייסד/ת', therapist: 'מטפל/ת', other: 'אחר', partner: 'שותף/ה' }; // partner נשאר רק לאפיונים ישנים
+const roleLabel = (role, other) => (role === 'other' && (other || '').trim() ? other.trim() : P_ROLES[role] || '');
 const P_SKILLS = { expertise: 'מומחיות מקצועית', marketing: 'שיווק ונראות', sales: 'מכירות ושימור לקוחות', ops: 'ארגון ותפעול', finance: 'כספים ותמחור', people: 'עבודה עם אנשים וניהול', tech: 'כלים דיגיטליים' };
 const P_ARCH = { expertise: 'המומחה/ית', marketing: 'איש/ת הנראות', sales: 'בונה/ת הקשרים', ops: 'המסדר/ת', finance: 'איש/ת המספרים', people: 'המחבר/ת', tech: 'הטכנולוג/ית' };
 const P_GOALS = { clients: 'להגדיל את מספר הלקוחות / המטופלים', income: 'להגדיל הכנסה', brand: 'לבנות מותג ונראות', structure: 'לבנות מבנה עבודה מסודר', team: 'להקים צוות או שותפויות', product: 'לפתח שירות או מוצר חדש', balance: 'לשפר איזון בין עבודה לחיים', skills: 'להעמיק מקצועית' };
 const P_PHASES = [null, { label: 'שבועיים ראשונים: יסודות', days: 14 }, { label: 'עד יום 30: הקמה', days: 30 }, { label: 'עד יום 60: צמיחה', days: 60 }, { label: 'עד יום 90: סקירה והמשך', days: 90 }];
 /* התמחויות לפי Tizon CRM: איחוד של התמחויות המטפלים (SPEC_LABEL) וסוגי הפרומפטים (aiPromptType / ADV_PROMPTS), עם אותם מפתחות.
    "שיטות נוספות" (הקבוצה האחרונה) עוד אין להן פרומפט ב-CRM. */
-const P_SPEC_GROUPS = [
-  ['רפואה סינית', [['tcm', 'רפואה סינית מסורתית'], ['acu_only', 'דיקור'], ['acu_tung', 'דיקור מאסטר טונג'], ['acu_kiiko', 'דיקור קיקו (יפני)'], ['chinese_nutrition', 'תזונה סינית'], ['tuina', 'טווינא']]],
-  ['רפואה משלימה וטבעית', [['herbal', 'צמחי מרפא'], ['naturopathy', 'נטורופתיה'], ['homeopathy', 'הומאופתיה'], ['bach_flowers', 'פרחי באך'], ['reiki', 'רייקי'], ['access_bars', 'אקסס בארס'], ['bio_orgonomy', 'ביו-אורגונומי']]],
-  ['תזונה ואורח חיים', [['nutrition', 'תזונה קלינית'], ['integrative', 'רפואה אינטגרטיבית'], ['blood_tests', 'פענוח בדיקות דם'], ['lifestyle', 'אורח חיים בריא']]],
-  ['גוף ומגע', [['massage', 'עיסוי טיפולי'], ['shiatzu', 'שיאצו'], ['osteopathy', 'אוסטאופתיה'], ['reflexology', 'רפלקסולוגיה'], ['emotional_ortho', 'אורתופדיה רגשית'], ['sports_therapy', 'ספורתרפיה'], ['movement', 'תנועה ויוגה'], ['fitness', 'כושר ופיטנס']]],
+const P_SPEC_GROUPS = [ // מפתח שמתחיל ב-x_ = אין לו (עדיין) פרומפט ב-Tizon CRM
+  ['רפואה סינית', [['tcm', 'רפואה סינית מסורתית'], ['acu_only', 'דיקור'], ['acu_tung', 'דיקור מאסטר טונג'], ['acu_kiiko', 'דיקור קיקו (יפני)'], ['x_acu_scalp', 'דיקור קרקפת'], ['x_acu_ear', 'דיקור אוזן'], ['x_acu_tizon', 'דיקור טייזון'], ['x_chinese_herbs', 'צמחי מרפא סיניים'], ['x_stems', 'Stems – שורשים וענפים'], ['x_five_elements', '5 האלמנטים'], ['chinese_nutrition', 'תזונה סינית'], ['tuina', 'טווינא']]],
+  ['רפואה משלימה וטבעית', [['herbal', 'צמחי מרפא מערביים'], ['naturopathy', 'נטורופתיה'], ['homeopathy', 'הומאופתיה'], ['bach_flowers', 'פרחי באך'], ['reiki', 'רייקי'], ['access_bars', 'אקסס בארס'], ['bio_orgonomy', 'ביו-אורגונומי']]],
+  ['תזונה ואורח חיים', [['nutrition', 'תזונה קלינית'], ['integrative', 'רפואה אינטגרטיבית']]],
+  ['כושר ופיטנס', [['fitness', 'אימון כושר אישי'], ['x_group_fitness', 'אימון קבוצתי וסטודיו'], ['movement', 'יוגה'], ['x_pilates', 'פילאטיס'], ['x_swimming', 'שחייה'], ['x_running', 'ריצה ואתלטיקה'], ['x_functional', 'אימון פונקציונלי'], ['x_strength', 'אימון כוח ומשקולות'], ['x_crossfit', 'קרוספיט'], ['x_martial', 'אומנויות לחימה ואגרוף']]],
+  ['גוף ומגע', [['massage', 'עיסוי טיפולי'], ['shiatzu', 'שיאצו'], ['osteopathy', 'אוסטאופתיה'], ['reflexology', 'רפלקסולוגיה'], ['emotional_ortho', 'אורתופדיה רגשית'], ['sports_therapy', 'ספורתרפיה']]],
   ['נפש ורגש', [['psychology', 'פסיכולוגיה'], ['cbt', 'CBT (קוגניטיבי-התנהגותי)'], ['trauma_emdr', 'טיפול בטראומה (EMDR / EFT)'], ['nlp', 'NLP'], ['mental_coach', 'אימון מנטלי'], ['rebirthing', 'ריברסינג'], ['addiction_recovery', 'גמילה מהתמכרויות'], ['sleep_consult', 'ייעוץ שינה']]],
   ['ילדים, נוער ומשפחה', [['adhd', 'הפרעות קשב וריכוז'], ['autism_support', 'תמיכה באוטיזם (רצף)'], ['parent_guidance', 'הדרכת הורים'], ['youth_coaching', 'אימון אישי לנוער'], ['couple_numerology', 'אבחון זוגי והתאמה']]],
   ['אבחון ואנרגיה', [['iridology', 'אירידולוגיה'], ['numerology', 'נומרולוגיה']]],
   ['יופי וטיפוח', [['cosmetics', 'קוסמטיקה'], ['pedicure', 'פדיקור / מניקור']]],
-  ['רפואה קונבנציונלית', [['doctor', 'רופא/ה']]],
-  ['שיטות נוספות', [['aroma', 'ארומתרפיה'], ['ayurveda', 'איורוודה'], ['kinesiology', 'קינסיולוגיה'], ['craniosacral', 'קרניו-סקראל'], ['feldenkrais', 'פלדנקרייז'], ['biofeedback', 'ביופידבק']]],
+  ['רפואה קונבנציונלית', [['doctor', 'רופא/ה'], ['x_nurse', 'אח/ות'], ['blood_tests', 'פיענוח בדיקות דם']]],
+  ['שיטות נוספות', [['x_aroma', 'ארומתרפיה'], ['x_ayurveda', 'איורוודה'], ['x_kinesiology', 'קינסיולוגיה'], ['x_craniosacral', 'קרניו-סקראל'], ['x_feldenkrais', 'פלדנקרייז'], ['x_biofeedback', 'ביופידבק']]],
 ];
+/* שדה "התמחות" שנפתח ליד מקצוע מסוים */
+const SPEC_DETAIL = { 'רופא/ה': ['doctorSpec', 'התמחות הרופא/ה', 'לדוגמה: רפואת משפחה, גינקולוגיה'], 'אח/ות': ['nurseSpec', 'התמחות האח/ות', 'לדוגמה: טיפול נמרץ, בריאות האישה'] };
+/* שמות שהשתנו: תשובות ישנות ממשיכות להופיע מסומנות */
+const SPEC_RENAMED = { 'צמחי מרפא': 'צמחי מרפא מערביים', 'פענוח בדיקות דם': 'פיענוח בדיקות דם', 'כושר ופיטנס': 'אימון כושר אישי', 'תנועה ויוגה': 'יוגה' };
+const specFix = (a) => { if (Array.isArray(a?.specialties)) a.specialties = [...new Set(a.specialties.map((x) => SPEC_RENAMED[x] || x))]; return a; };
+const specTags = (A) => [...(A.specialties || []).map((x) => (SPEC_DETAIL[x] && (A[SPEC_DETAIL[x][0]] || '').trim() ? `${x}: ${A[SPEC_DETAIL[x][0]].trim()}` : x)), A.specialtiesOther];
 const SPEC_KEY = Object.fromEntries(P_SPEC_GROUPS.flatMap(([, l]) => l.map(([k, t]) => [t, k]))); // שם ← מפתח ב-CRM
-const CRM_SPEC = new Set(P_SPEC_GROUPS.slice(0, -1).flatMap(([, l]) => l.map(([, t]) => t))); // יש להן פרומפט ב-CRM
+const CRM_SPEC = new Set(P_SPEC_GROUPS.flatMap(([, l]) => l.filter(([k]) => !k.startsWith('x_')).map(([, t]) => t))); // יש להן פרומפט ב-CRM
 const P_OPT = {
   focus: ['חרדה ולחץ', 'דיכאון ומצב רוח', 'זוגיות', 'הורות ומשפחה', 'ילדים ונוער', 'טראומה', 'תזונה ואורח חיים', 'כאב כרוני', 'שינה', 'התמכרויות', 'פיתוח אישי וקריירה', 'ליווי עסקי'],
   education: ['תואר ראשון', 'תואר שני', 'דוקטורט', 'תעודה מקצועית', 'רישיון / הסמכה רשמית', 'קורסים והשתלמויות'],
@@ -646,7 +654,7 @@ const P_OPT = {
   support: ['ליווי שבועי', 'סדנאות', 'תבניות ומסמכים', 'עזרה בשיווק', 'עזרה בטכנולוגיה', 'נטוורקינג וחיבורים'],
   start: ['מיד', 'תוך שבועיים', 'תוך חודש', 'בעוד יותר מחודש'],
 };
-const P_ROLE_DESC = { founder: 'מקים/ה או מוביל/ה עסק', partner: 'שותף/ה בעסק או במיזם', therapist: 'עובד/ת מול מטופלים' };
+const P_ROLE_DESC = { founder: 'מקים/ה או מוביל/ה עסק', partner: 'שותף/ה בעסק או במיזם', therapist: 'עובד/ת מול מטופלים', other: 'תפקיד אחר: כתוב/י במילים שלך' };
 /* רקע טכנולוגי: לכל כלי סולם של 4 שלבים */
 const TECH_LVL = ['אין', 'בתהליך', 'יש, בסיסי', 'בשימוש מלא'];
 const P_TECH = [
@@ -721,6 +729,7 @@ const P_BASE = {
     { p: 2, ph: 4, area: 'כספים', t: 'לסקור עומס מטופלים מול היעד ולהתאים תמחור', why: 'מחיר ועומס נקבעים יחד.' },
   ],
 };
+P_ROLE_Q.other = P_ROLE_Q.founder; P_BASE.other = P_BASE.founder; // "אחר" מקבל את השאלות והפעולות הכלליות לעסק
 const P_GAP = {
   expertise: [{ ph: 2, t: 'לקבוע תוכנית התפתחות מקצועית: הכשרה או מפגש הדרכה אחד בחודש' }, { ph: 3, t: 'לתעד שיטת עבודה או מקרה מייצג שאפשר לשתף' }],
   marketing: [{ ph: 2, t: 'לבחור ערוץ תוכן אחד ולפרסם בו פעם בשבוע' }, { ph: 3, t: 'לנסח מסר אחד ברור ולהקים עמוד או פרופיל שמציג אותו' }],
@@ -746,7 +755,7 @@ function buildProfile(a, base = Date.now()) {
   const acts = P_BASE[a.role].map((x, i) => ({ ...x, p: i < 2 ? Math.min(x.p, 1) : Math.max(x.p, 2), src: 'role' }));
   const add = (o) => acts.push({ src: 'ans', ...o }); // src: ans (מהתשובות), goal, gap, role (תבנית כללית)
   // התאמות לפי תשובות התפקיד
-  if (a.role === 'founder') {
+  if (a.role === 'founder' || a.role === 'other') {
     if (['רעיון', 'בהקמה'].includes(a.stage)) add({ p: 1, ph: 1, area: 'הקמה', t: 'לבדוק היבטים משפטיים בסיסיים: סוג עוסק, ביטוח, הסכם סטנדרטי ללקוח', why: 'להתחיל נכון עולה פחות מלתקן אחר כך.' });
     else add({ p: 1, ph: 2, area: 'מכירות', t: 'למדוד המרה ושימור לקוחות ולזהות איפה הלקוחות נושרים', why: 'בעסק פועל, הצמיחה יושבת על הדליפה הגדולה ביותר.' });
     const bn = { 'חוסר בלקוחות': ['שיווק', 'להגדיר ערוץ גיוס לקוחות עיקרי ולהקצות לו שעתיים קבועות בשבוע'], 'כסף': ['כספים', 'לזהות את שלוש ההוצאות הגדולות ולבדוק מה אפשר לצמצם או לדחות'], 'זמן': ['תפעול', 'לזהות שלוש משימות שאפשר להאציל, להפסיק או לאוטמט'], 'צוות': ['ניהול', 'להגדיר תיאור תפקיד לאדם הבא שמצטרף ולמי הוא כפוף'], 'ידע מקצועי': ['התפתחות', 'לבחור מנטור או קורס שסוגר את פער הידע המרכזי'], 'בהירות לגבי הכיוון': ['אסטרטגיה', 'לקיים סדנת כיוון של חצי יום ולסכם החלטה כתובה'] }[a.bottleneck];
@@ -861,7 +870,7 @@ function profileView() {
   return `<h1>אפיון אישי</h1><p class="muted">שאלון קצר לכל שותף, מייסד או מטפל. בסופו מתקבלת תוכנית אישית ל-90 יום, שאפשר להפוך בלחיצה למשימות עם תאריכים.</p>
   ${intakeCard()}
   <div class="bar"><span class="muted">${list.length ? list.length + ' אפיונים' : ''}</span><button class="pri" data-do="profNew">+ אפיון חדש</button></div>
-  ${list.length ? list.map((p) => `<div class="card"><div class="bar" style="margin:0"><div><h2 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span> ${p.isNew ? '<span class="tag warn">חדש</span>' : ''} ${p.source === 'client' ? '<span class="tag">מולא ע״י הלקוח</span>' : ''} ${p.tasksAdded ? '<span class="tag ok">התוכנית במשימות</span>' : ''}</h2>
+  ${list.length ? list.map((p) => `<div class="card"><div class="bar" style="margin:0"><div><h2 style="margin:0">${esc(p.name)} <span class="tag">${esc(roleLabel(p.role, p.answers?.roleOther))}</span> ${p.isNew ? '<span class="tag warn">חדש</span>' : ''} ${p.source === 'client' ? '<span class="tag">מולא ע״י הלקוח</span>' : ''} ${p.tasksAdded ? '<span class="tag ok">התוכנית במשימות</span>' : ''}</h2>
     <span class="muted">${esc(p.archetype)} · ${birthText(p.answers.birth) ? `נולד/ה ${esc(birthText(p.answers.birth))} · ` : ''}${p.plan.length} פעולות · ${esc(new Date(p.createdAt).toLocaleDateString('he-IL'))}</span></div>
     <span><button class="sm pri" data-do="profOpen" data-id="${p.id}">פתח תוכנית</button> <button class="sm" data-do="profEdit" data-id="${p.id}">עריכת אפיון</button> <button class="sm del" data-do="profDel" data-id="${p.id}">מחיקה</button></span></div></div>`).join('')
     : '<div class="card empty"><p>עוד לא מולא אפיון.</p><button class="pri" data-do="profNew">התחל אפיון ראשון</button></div>'}`;
@@ -878,11 +887,12 @@ function wizView() {
   const lab = (t, sub = '') => `<label>${t}${sub ? ` <span class="muted">${sub}</span>` : ''}</label>`;
   let body = '';
   if (key === 'me') body = sec('פרטים אישיים', `<div class="grid2">${inp('name', 'שם מלא', 'text', 'autocomplete="off" placeholder="לדוגמה: נועה כהן"')}${inp('birth', 'תאריך לידה', 'date', `dir="ltr" min="1920-01-01" max="${todayISO()}" required`)}</div>`)
-    + sec('מה התפקיד שלך?', `<div class="rolecards" role="radiogroup" aria-label="תפקיד">${Object.entries(P_ROLES).map(([k, v]) => `<label class="rolecard ${d.role === k ? 'on' : ''}"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}><span class="rc-t">${v}</span><span class="rc-d">${P_ROLE_DESC[k]}</span></label>`).join('')}</div>`)
+    + sec('מה התפקיד שלך?', `<div class="rolecards" role="radiogroup" aria-label="תפקיד">${Object.entries(P_ROLES).filter(([k]) => k !== 'partner' || d.role === 'partner').map(([k, v]) => `<label class="rolecard ${d.role === k ? 'on' : ''}"><input type="radio" name="role" data-w="role" value="${k}" ${d.role === k ? 'checked' : ''}><span class="rc-t">${v}</span><span class="rc-d">${P_ROLE_DESC[k]}</span></label>`).join('')}</div><div id="roleOtherBox" ${d.role === 'other' ? '' : 'hidden'}>${inp('roleOther', 'מה התפקיד שלך?', 'text', 'autocomplete="off" maxlength="80" placeholder="לדוגמה: מנהל/ת קליניקה, יועץ/ת, סטודנט/ית"')}</div>`)
     + sec('פרטי קשר', `<div class="grid2">${inp('phone', 'טלפון', 'tel', 'dir="ltr" autocomplete="off" placeholder="050-0000000"')}${inp('email', 'מייל', 'email', 'dir="ltr" autocomplete="off" placeholder="name@example.com"')}</div>${inp('city', 'עיר / אזור', 'text', 'placeholder="לדוגמה: תל אביב"')}`)
-    + sec('ניסיון וזמינות', `<div class="grid2"><div class="fld">${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div>${inp('hours', 'שעות בשבוע לבנייה ולצמיחה', 'number', 'min="0" max="80"')}</div>`);
+    + sec('ניסיון וזמינות', `<div class="grid2"><div class="fld">${lab('ניסיון בתחום')}${sel('exp', P_EXP)}</div>${inp('hours', 'שעות בשבוע להתפתחות אישית', 'number', 'min="0" max="80"')}</div>`);
   const many = '(אפשר לבחור כמה)';
-  const groupedChips = (k, groups) => groups.map(([g, list]) => `<div class="cgroup" role="group" aria-label="${g}"><div class="cg-t">${g}</div>${chips(k, list.map(([, t]) => t)).replace(/<p class="err hint"[^>]*><\/p>/, '')}</div>`).join('');
+  const specDet = (list) => list.filter(([, t]) => SPEC_DETAIL[t]).map(([, t]) => { const [f, l, ph] = SPEC_DETAIL[t]; return `<div data-for="${esc(t)}" ${(d.specialties || []).includes(t) ? '' : 'hidden'}>${inp(f, l, 'text', `maxlength="80" placeholder="${ph}"`)}</div>`; }).join('');
+  const groupedChips = (k, groups) => groups.map(([g, list]) => `<div class="cgroup" role="group" aria-label="${g}"><div class="cg-t">${g}</div>${chips(k, list.map(([, t]) => t)).replace(/<p class="err hint"[^>]*><\/p>/, '')}${k === 'specialties' ? specDet(list) : ''}</div>`).join('');
   if (key === 'bg') body = sec('התמחות טיפולית', groupedChips('specialties', P_SPEC_GROUPS) + inp('specialtiesOther', 'שיטה נוספת שלא ברשימה'), many)
     + sec('תחומי טיפול', chips('focus', P_OPT.focus), '(במה מטפלים? אפשר לבחור כמה)')
     + sec('השכלה והסמכות', chips('education', P_OPT.education) + inp('educationDetail', 'פירוט (שם התואר, ההסמכה או המוסד)'), many)
@@ -911,7 +921,7 @@ function wizView() {
     P_ROLE_Q[d.role].forEach((q) => { if (q.type === 'number' && d[q.k] === undefined) d[q.k] = String(q.def ?? 0); });
     const f = (q) => (q.opts ? `<div class="fld">${lab(q.label)}${sel(q.k, q.opts)}</div>` : inp(q.k, q.label, q.type || 'text', q.type === 'number' ? 'min="0"' : ''));
     const qs = P_ROLE_Q[d.role]; const nums = qs.filter((q) => q.type === 'number'); const rest = qs.filter((q) => q.type !== 'number');
-    body = sec(`שאלות ל${P_ROLES[d.role]}`, `${rest.map(f).join('')}${nums.length ? `<div class="grid2">${nums.map(f).join('')}</div>` : ''}`, '(כמעט סיימנו)');
+    body = sec(d.role === 'other' ? 'שאלות על העבודה שלך' : `שאלות ל${P_ROLES[d.role]}`, `${rest.map(f).join('')}${nums.length ? `<div class="grid2">${nums.map(f).join('')}</div>` : ''}`, '(כמעט סיימנו)');
   }
   if (key === 'me' && wiz.public) body += '<input class="hp" data-w="website" tabindex="-1" autocomplete="off" aria-hidden="true" placeholder="website">'; // מלכודת לבוטים
   const h1 = wiz.public ? esc(pub.form?.title || 'שאלון היכרות') : wiz.editId ? 'עריכת אפיון' : 'אפיון אישי';
@@ -928,6 +938,7 @@ function wizCheck() {
   if (key === 'me' && !(d.name || '').trim()) return 'יש להזין שם';
   if (key === 'me' && !birthOk(d.birth)) return d.birth ? 'תאריך הלידה אינו תקין' : 'יש להזין תאריך לידה';
   if (key === 'me' && !d.role) return 'יש לבחור תפקיד';
+  if (key === 'me' && d.role === 'other' && !(d.roleOther || '').trim()) return 'יש לכתוב מה התפקיד שלך';
   if (key === 'me' && d.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.email.trim())) return 'כתובת המייל אינה תקינה';
   if (key === 'goals' && !(d.goals || []).length) return 'יש לבחור לפחות מטרה אחת';
   return '';
@@ -939,9 +950,10 @@ document.addEventListener('input', (ev) => {
     const cur = new Set(wiz.data[k] || []);
     if (t.checked) { if (max && cur.size >= max) { t.checked = false; if (h) h.textContent = `אפשר לבחור עד ${max}`; return; } cur.add(t.value); } else cur.delete(t.value);
     wiz.data[k] = [...cur]; if (h) h.textContent = '';
+    if (k === 'specialties') document.querySelectorAll('[data-for]').forEach((el) => { if (el.dataset.for === t.value) el.hidden = !t.checked; });
   } else if (t.dataset.w) {
     wiz.data[t.dataset.w] = t.value; if (t.type === 'range') t.nextElementSibling.textContent = t.value;
-    if (t.name === 'role') document.querySelectorAll('.rolecard').forEach((c) => c.classList.toggle('on', c.contains(t)));
+    if (t.name === 'role') { document.querySelectorAll('.rolecard').forEach((c) => c.classList.toggle('on', c.contains(t))); const ob = $('#roleOtherBox'); if (ob) { ob.hidden = t.value !== 'other'; if (!ob.hidden) $('#w_roleOther')?.focus(); } }
     if (t.type === 'radio' && t.closest('.seg')) t.closest('.seg').querySelectorAll('label').forEach((l) => l.classList.toggle('on', l.contains(t)));
   }
 });
@@ -966,7 +978,7 @@ function planReport(p) {
   const day = (n) => dmy(pDate(planBase(p), n)); const sk = [...p.ranked].sort((x, y) => y.v - x.v);
   const logo = document.querySelector('.top .logo')?.src || '';
   return `<div class="rp-head">${logo ? `<img src="${logo}" alt="TizonHealth">` : ''}<div><b>טייזון – היועץ העסקי שלך</b><span>תוכנית אישית ל-90 יום</span></div></div>
-  <h1>${esc(p.name)}</h1><p class="rp-sub">${esc(P_ROLES[p.role] || '')} · הופק ב-${esc(new Date().toLocaleDateString('he-IL'))} · תחילת התוכנית ${esc(dmy(pDate(planBase(p), 0)))}</p>
+  <h1>${esc(p.name)}</h1><p class="rp-sub">${esc(roleLabel(p.role, p.answers?.roleOther))} · הופק ב-${esc(new Date().toLocaleDateString('he-IL'))} · תחילת התוכנית ${esc(dmy(pDate(planBase(p), 0)))}</p>
   <section><h2>${esc(p.archetype)}</h2><p>החוזקה הבולטת: <b>${esc(P_SKILLS[p.top])}</b>. תחומים לחיזוק: <b>${p.low.map((k) => esc(P_SKILLS[k])).join(', ')}</b>.</p>
   <table class="rp-sk">${sk.map((x) => `<tr><td>${esc(P_SKILLS[x.k])}</td><td><span class="rp-bar"><i style="width:${x.v * 20}%"></i></span></td><td>${x.v}/5</td></tr>`).join('')}</table>
   ${(p.answers.goals || []).length ? `<p>המטרות שבחרת: ${p.answers.goals.map((g) => esc(P_GOALS[g])).join(' · ')}</p>` : ''}${p.answers.success ? `<p>הצלחה בעוד 90 יום, במילים שלך: <i>${esc(p.answers.success)}</i></p>` : ''}</section>
@@ -1007,7 +1019,7 @@ function profileDetail(p) {
   const tags = (arr) => (arr || []).filter(Boolean).map((x) => `<span class="tag">${esc(x)}</span>`).join(' ');
   const row = (k, v) => (v ? `<div class="kv"><span class="muted">${k}</span><span>${v}</span></div>` : '');
   const byPhase = [1, 2, 3, 4].map((ph) => ({ ph, items: p.plan.filter((x) => x.phase === ph) })).filter((g) => g.items.length);
-  return `<div class="bar"><h1 style="margin:0">${esc(p.name)} <span class="tag">${esc(P_ROLES[p.role])}</span></h1><span><button class="pri" data-do="profSend" data-id="${p.id}">שליחה ל${esc(firstName(p.name))}</button> <button data-do="profEdit" data-id="${p.id}">עריכת אפיון</button> <button data-do="profBack">← כל האפיונים</button></span></div>
+  return `<div class="bar"><h1 style="margin:0">${esc(p.name)} <span class="tag">${esc(roleLabel(p.role, p.answers?.roleOther))}</span></h1><span><button class="pri" data-do="profSend" data-id="${p.id}">שליחה ל${esc(firstName(p.name))}</button> <button data-do="profEdit" data-id="${p.id}">עריכת אפיון</button> <button data-do="profBack">← כל האפיונים</button></span></div>
   ${p.sentAt ? `<p class="muted" style="margin-top:-6px">התוכנית נשלחה ל${esc(firstName(p.name))} ב-${esc(new Date(p.sentAt).toLocaleDateString('he-IL'))} (${esc(p.sentVia || '')}).</p>` : ''}
   <div class="card"><h2>${esc(p.archetype)}</h2><p>החוזקה הבולטת: <b>${esc(P_SKILLS[p.top])}</b>. תחומים לחיזוק: <b>${p.low.map((k) => esc(P_SKILLS[k])).join(', ')}</b>.</p>
   ${sk.map((s) => `<div style="margin:8px 0"><div class="bar" style="margin:0"><span>${esc(P_SKILLS[s.k])}</span><b>${s.v}/5</b></div><div class="meter"><i style="width:${s.v * 20}%;background:${s.v <= 2 ? 'var(--warn)' : 'var(--ok)'}"></i></div></div>`).join('')}
@@ -1025,7 +1037,7 @@ function profileDetail(p) {
   <div class="card"><h2>איך נעבוד ביחד</h2><ul>${p.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul><p class="muted">התוכנית היא המלצה כללית לתכנון עבודה, ואינה ייעוץ משפטי, פיננסי או רפואי.</p></div>
   <details class="card details"><summary><h2>פרטים ורקע</h2> <span class="muted">(לחץ לפתיחה)</span></summary>
   ${row('תאריך לידה', esc(birthText(A.birth)))}${row('טלפון', A.phone ? `<span dir="ltr">${esc(A.phone)}</span>` : '')}${row('מייל', A.email ? `<span dir="ltr">${esc(A.email)}</span>` : '')}${row('עיר / אזור', esc(A.city || ''))}${row('ניסיון', esc(A.exp || ''))}
-  ${row('התמחות', tags([...(A.specialties || []), A.specialtiesOther]))}${row('תחומי טיפול', tags(A.focus))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
+  ${row('התמחות', tags(specTags(A)))}${row('תחומי טיפול', tags(A.focus))}${row('השכלה', tags([...(A.education || []), A.educationDetail]))}${row('שפות', tags([...(A.languages || []), A.languagesOther]))}
   ${row('קהל יעד', tags(A.audience))}${row('ערוצים וכלים', tags(A.channels))}${row('תקציב לרבעון', esc(A.budget || ''))}${row('מחיר לפגישה', num(A.price) ? money(A.price) : '')}
   ${row('ערכים', tags(A.values))}${row('נותן אנרגיה', tags(A.energyGive))}${row('לוקח אנרגיה', tags(A.energyTake))}${row('זמנים מועדפים', tags(A.times))}${row('למידה', tags(A.learning))}
   ${row('כלים דיגיטליים', P_TECH.filter(([k]) => techLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${techLvl(A, k) >= 2 ? 'ok' : techLvl(A, k) === 0 ? 'bad' : 'warn'}">${esc(t)}: ${esc(TECH_LVL[techLvl(A, k)])}</span>`).join(' '))}${row('אפליקציות טייזון', TIZON_APPS.filter(([k]) => appLvl(A, k) !== null).map(([k, t]) => `<span class="tag ${appLvl(A, k) >= 2 ? 'ok' : ''}">${esc(t)}: ${esc(APP_LVL[appLvl(A, k)])}</span>`).join(' '))}${row('נוחות עם טכנולוגיה', A.techComfort ? esc(A.techComfort) + ' / 5' : '')}${row('חסמים', tags(A.barriers))}${row('תמיכה מבוקשת', tags(A.support))}${row('מוכנות', A.readiness ? esc(A.readiness) + ' / 10' : '')}${row('התחלה', esc(A.start || ''))}</details>`;
@@ -1126,7 +1138,7 @@ function adminView() {
     <div class="card"><h2>משימות (${d.tasks.length})</h2>${tbl(d.tasks, ['משימה', 'פרויקט', 'יעד', 'סטטוס'], (t) => [esc(t.title), esc(pn(d, t.project)), esc(t.due || ''), t.done ? 'הושלמה' : 'פתוחה'])}</div>
     <div class="card"><h2>שעות (${d.time.length})</h2>${tbl([...d.time].reverse(), ['תאריך', 'פרויקט', 'תיאור', 'שעות', 'סכום', 'חויב'], (t) => [esc(t.date), esc(pn(d, t.project)), esc(t.desc), t.hours, money(t.hours * t.rate), t.invoice ? 'כן' : 'לא'])}</div>
     <div class="card"><h2>חשבוניות (${d.invoices.length})</h2>${tbl(d.invoices, ['מס׳', 'תאריך', 'לקוח', 'סכום', 'סטטוס'], (i) => [i.no, esc(i.date), esc(cn(d, i.client)), money(i.total), i.paid ? 'שולמה' : 'פתוחה'])}</div>
-    <div class="card"><h2>אפיונים אישיים (${d.profiles.length})</h2>${tbl(d.profiles, ['שם', 'תפקיד', 'אופי', 'נוצר', 'פעולות בתוכנית'], (p) => [esc(p.name), esc(P_ROLES[p.role] || ''), esc(p.archetype), esc(new Date(p.createdAt).toLocaleDateString('he-IL')), p.plan.length])}</div>
+    <div class="card"><h2>אפיונים אישיים (${d.profiles.length})</h2>${tbl(d.profiles, ['שם', 'תפקיד', 'אופי', 'נוצר', 'פעולות בתוכנית'], (p) => [esc(p.name), esc(roleLabel(p.role, p.answers?.roleOther)), esc(p.archetype), esc(new Date(p.createdAt).toLocaleDateString('he-IL')), p.plan.length])}</div>
     <div class="card"><h2>אבחונים (${d.diagnostics.length})</h2>${tbl(d.diagnostics, ['תאריך', 'לקוח', 'ציון כולל'], (g) => { const sc = scoreOf(g); return [esc(g.date), esc(cn(d, g.client)), Math.round(sc.reduce((x, y) => x + y.pct, 0) / sc.length) + '%']; })}</div>`;
   }
   const sums = list.map((w) => ({ w, ...ownerSummary(w) }));

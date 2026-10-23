@@ -151,3 +151,4 @@ a.btn{display:inline-block;text-decoration:none}a.btn.pri{background:var(--pri);
 #printReport .rp-bar{display:block;width:220px;height:9px;background:#eee;border-radius:5px;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 #printReport .rp-bar i{display:block;height:100%;background:#8a6429;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 #printReport .rp-foot{margin-top:18px;color:#777;font-size:10pt;border-top:1px solid #ddd;padding-top:6px}
+#roleOtherBox{margin-top:10px}
