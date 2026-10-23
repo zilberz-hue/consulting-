@@ -1334,7 +1334,7 @@ function wizView() {
       ${lab('אילו מוצרים דיגיטליים יש או מתוכננים?', many)}${chips('digital', P_OPT.digital)}`, '(לא חובה)');
   if (key === 'skills') body = sec('דירוג עצמי', `<p class="muted" style="margin:0 0 6px">מ-1 (חלש) עד 5 (חזק). אין תשובה נכונה.</p>${Object.entries(P_SKILLS).map(([k, v]) => `<div class="q"><span>${v}</span><span class="rate"><input type="range" min="1" max="5" step="1" data-w="skill_${k}" value="${d['skill_' + k] || 3}" aria-label="${esc(v)}"><output>${d['skill_' + k] || 3}</output></span></div>`).join('')}`);
   if (key === 'style') body = sec('איך את/ה עובד/ת', `<div class="grid3"><div class="fld">${lab('קצב עבודה')}${sel('pace', ['נינוח', 'מאוזן', 'מהיר'])}</div><div class="fld">${lab('קבלת החלטות')}${sel('decision', ['מנתח/ת', 'אינטואיטיבי/ת', 'שיתופי/ת'])}</div><div class="fld">${lab('תקשורת מועדפת')}${sel('comm', ['כתוב', 'שיחה', 'פגישות'])}</div></div>`)
-    + sec('ערכים מובילים', chips('values', P_OPT.values, 3), '(עד שלושה)')
+    + sec('ערכים מובילים', chips('values', P_OPT.values), many)
     + sec('אנרגיה', `${lab('מה נותן לך אנרגיה?')}${chips('energyGive', P_OPT.energy)}${lab('מה לוקח ממך אנרגיה?')}${chips('energyTake', P_OPT.energy)}`, many)
     + sec('זמנים ולמידה', `${lab('זמני עבודה מועדפים')}${chips('times', P_OPT.times)}${lab('איך הכי נוח לך ללמוד?')}${chips('learning', P_OPT.learning)}`, many);
   if (key === 'barriers') body = sec('מה מעכב אותך היום?', chips('barriers', P_OPT.barriers) + tx('obstacle', 'במילים שלך'), many)
