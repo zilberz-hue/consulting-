@@ -635,13 +635,14 @@ const P_SPEC_GROUPS = [ // מפתח שמתחיל ב-x_ = אין לו (עדיין
 const SPEC_DETAIL = { 'רופא/ה': ['doctorSpec', 'התמחות הרופא/ה', 'לדוגמה: רפואת משפחה, גינקולוגיה'], 'אח/ות': ['nurseSpec', 'התמחות האח/ות', 'לדוגמה: טיפול נמרץ, בריאות האישה'] };
 /* שמות שהשתנו: תשובות ישנות ממשיכות להופיע מסומנות */
 const SPEC_RENAMED = { 'צמחי מרפא': 'צמחי מרפא מערביים', 'פענוח בדיקות דם': 'פיענוח בדיקות דם', 'כושר ופיטנס': 'אימון כושר אישי', 'תנועה ויוגה': 'יוגה' };
-const specFix = (a) => { if (Array.isArray(a?.specialties)) a.specialties = [...new Set(a.specialties.map((x) => SPEC_RENAMED[x] || x))]; return a; };
+const EDU_RENAMED = { 'תעודה מקצועית': 'תעודה מקצועית / הסמכה' };
+const specFix = (a) => { if (Array.isArray(a?.specialties)) a.specialties = [...new Set(a.specialties.map((x) => SPEC_RENAMED[x] || x))]; if (Array.isArray(a?.education)) a.education = [...new Set(a.education.map((x) => EDU_RENAMED[x] || x))]; return a; };
 const specTags = (A) => [...(A.specialties || []).map((x) => (SPEC_DETAIL[x] && (A[SPEC_DETAIL[x][0]] || '').trim() ? `${x}: ${A[SPEC_DETAIL[x][0]].trim()}` : x)), A.specialtiesOther];
 const SPEC_KEY = Object.fromEntries(P_SPEC_GROUPS.flatMap(([, l]) => l.map(([k, t]) => [t, k]))); // שם ← מפתח ב-CRM
 const CRM_SPEC = new Set(P_SPEC_GROUPS.flatMap(([, l]) => l.filter(([k]) => !k.startsWith('x_')).map(([, t]) => t))); // יש להן פרומפט ב-CRM
 const P_OPT = {
   focus: ['חרדה ולחץ', 'דיכאון ומצב רוח', 'זוגיות', 'הורות ומשפחה', 'ילדים ונוער', 'טראומה', 'תזונה ואורח חיים', 'כאב כרוני', 'שינה', 'התמכרויות', 'פיתוח אישי וקריירה', 'ליווי עסקי'],
-  education: ['תואר ראשון', 'תואר שני', 'דוקטורט', 'תעודה מקצועית', 'רישיון / הסמכה רשמית', 'קורסים והשתלמויות'],
+  education: ['תואר ראשון', 'תואר שני', 'דוקטורט', 'תעודה מקצועית / הסמכה', 'רישיון / הסמכה רשמית', 'קורסים והשתלמויות'],
   languages: ['עברית', 'אנגלית', 'ערבית', 'רוסית', 'צרפתית', 'ספרדית', 'אמהרית', 'יידיש'],
   audience: ['ילדים', 'נוער', 'מבוגרים', 'זוגות', 'משפחות', 'גיל שלישי', 'נשים', 'גברים', 'ארגונים וחברות', 'עסקים קטנים'],
   channels: ['אינסטגרם', 'פייסבוק', 'טיקטוק', 'לינקדאין', 'יוטיוב', 'וואטסאפ עסקי', 'פרופיל גוגל עסקי', 'ניוזלטר', 'הרצאות וכנסים', 'קבוצות וקהילות'],
