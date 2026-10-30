@@ -13,7 +13,7 @@ logo = base64.b64encode(open('logo.png', 'rb').read()).decode()
 has_cfg = bool(re.search(r'^window\.FIREBASE_CONFIG\s*=\s*\{', cfg, re.M))
 SDK_NAMES = ('app', 'auth', 'firestore')
 # בקובץ שעולה לאתר ה-SDK מוגש מאותו דומיין (vendor/), כי ברשתות מסוננות הבקשה ל-gstatic נתקעת ומשאירה דף לבן
-SDK_LOCAL = ''.join(f'<script src="vendor/firebase-{n}-compat.js?v=10.14.1"></script>\n' for n in SDK_NAMES)
+SDK_LOCAL = '<script>window.LIB_BASE = "vendor/"</script>\n' + ''.join(f'<script src="vendor/firebase-{n}-compat.js?v=10.14.1"></script>\n' for n in SDK_NAMES)
 SDK_CDN = ''.join(f'<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-{n}-compat.js"></script>\n' for n in SDK_NAMES)
 # רץ לפני כל השאר: אם האתר לא עלה תוך זמן סביר, או שנזרקה שגיאה, מציג הודעה במקום דף ריק
 BOOT = '''<script>
@@ -41,8 +41,8 @@ def full(inner):
             + inner + '</body>\n</html>\n')
 
 os.makedirs('dist/vendor', exist_ok=True)
-for n in SDK_NAMES:
-    shutil.copy(f'vendor/firebase-{n}-compat.js', 'dist/vendor/')
+for f in os.listdir('vendor'):  # Firebase + ספריות ה-PDF (נטענות רק כשמייצאים)
+    shutil.copy(os.path.join('vendor', f), 'dist/vendor/')
 open('dist/index.html', 'w', encoding='utf-8').write(full(page(True, SDK_LOCAL)))
 html = full(page(True))
 open('standalone.html', 'w', encoding='utf-8').write(html)

@@ -990,35 +990,84 @@ function planReport(p) {
   <section><h2>${esc(p.archetype)}</h2><p>החוזקה הבולטת: <b>${esc(P_SKILLS[p.top])}</b>. תחומים לחיזוק: <b>${p.low.map((k) => esc(P_SKILLS[k])).join(', ')}</b>.</p>
   <table class="rp-sk">${sk.map((x) => `<tr><td>${esc(P_SKILLS[x.k])}</td><td><span class="rp-bar"><i style="width:${x.v * 20}%"></i></span></td><td>${x.v}/5</td></tr>`).join('')}</table>
   ${(p.answers.goals || []).length ? `<p>המטרות שבחרת: ${p.answers.goals.map((g) => esc(P_GOALS[g])).join(' · ')}</p>` : ''}${p.answers.success ? `<p>הצלחה בעוד 90 יום, במילים שלך: <i>${esc(p.answers.success)}</i></p>` : ''}</section>
-  ${(p.kpis || []).length ? `<section><h2>מדדי הצלחה ל-90 יום</h2><ul>${p.kpis.map((k) => `<li>${esc(k)}</li>`).join('')}</ul></section>` : ''}
-  <section><h2>התוכנית שלך</h2>${planGroups(p).map((g) => `<h3>${esc(P_PHASES[g.ph].label)} <span>· עד ${esc(day(P_PHASES[g.ph].days))}</span></h3><ol>${g.items.map((x) => `<li><b>${esc(x.title)}</b><br><span class="rp-why">${esc(x.why)}</span></li>`).join('')}</ol>`).join('')}</section>
-  ${(p.notes || []).filter(Boolean).length ? `<section><h2>איך נעבוד ביחד</h2><ul>${p.notes.filter(Boolean).map((n) => `<li>${esc(n)}</li>`).join('')}</ul></section>` : ''}
+  ${(p.kpis || []).length ? `<section><h2>מדדי הצלחה ל-90 יום</h2><ul>${p.kpis.map((k) => `<li><span class="rp-n">•</span>${esc(k)}</li>`).join('')}</ul></section>` : ''}
+  <section><h2>התוכנית שלך</h2>${planGroups(p).map((g) => `<h3>${esc(P_PHASES[g.ph].label)} <span>· עד ${esc(day(P_PHASES[g.ph].days))}</span></h3><ol>${g.items.map((x, n) => `<li><span class="rp-n">${n + 1}.</span><b>${esc(x.title)}</b><br><span class="rp-why">${esc(x.why)}</span></li>`).join('')}</ol>`).join('')}</section>
+  ${(p.notes || []).filter(Boolean).length ? `<section><h2>איך נעבוד ביחד</h2><ul>${p.notes.filter(Boolean).map((n) => `<li><span class="rp-n">•</span>${esc(n)}</li>`).join('')}</ul></section>` : ''}
   <p class="rp-foot">התוכנית היא המלצה כללית לתכנון עבודה, ואינה ייעוץ משפטי, פיננסי או רפואי.</p>`;
 }
 function printReport(p) {
-  let r = document.getElementById('printReport'); if (!r) { r = document.createElement('div'); r.id = 'printReport'; document.body.appendChild(r); }
+  let r = document.getElementById('printReport'); if (!r) { r = document.createElement('div'); r.id = 'printReport'; r.className = 'rp-doc'; document.body.appendChild(r); }
   r.innerHTML = planReport(p); document.body.classList.add('rp-on');
   const t = document.title; document.title = `תוכנית אישית - ${p.name}`; // שם הקובץ כשנשמר כ-PDF
   const done = () => { document.body.classList.remove('rp-on'); document.title = t; removeEventListener('afterprint', done); };
   addEventListener('afterprint', done); setTimeout(() => window.print(), 50);
 }
 function markSent(p, via) { p.sentAt = Date.now(); p.sentVia = via; save(); render(); }
+/* ---------- קובץ PDF אמיתי (html2canvas + jsPDF), נטען רק כשצריך ---------- */
+const LIB = window.LIB_BASE ? { h2c: LIB_BASE + 'html2canvas-1.4.1.min.js', pdf: LIB_BASE + 'jspdf-2.5.1.umd.min.js' }
+  : { h2c: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', pdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js' };
+const loadScript = (src) => new Promise((ok, fail) => { if (document.querySelector(`script[src="${src}"]`)) return ok(); const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => fail(new Error('load')); document.head.appendChild(el); });
+const pdfName = (p) => `תוכנית אישית - ${String(p.name).replace(/[\\/:*?"<>|]+/g, ' ').trim()}.pdf`;
+async function planPdf(p) {
+  await Promise.all([loadScript(LIB.h2c), loadScript(LIB.pdf)]);
+  const st = document.createElement('div'); st.id = 'pdfStage'; st.className = 'rp-doc'; st.innerHTML = planReport(p); document.body.appendChild(st);
+  try {
+    await Promise.all([...st.querySelectorAll('img')].map((im) => (im.complete ? 0 : new Promise((r) => { im.onload = im.onerror = r; }))));
+    const W = st.offsetWidth; const PAGE = Math.floor(W * 297 / 210); const top0 = st.getBoundingClientRect().top;
+    /* חיתוך עמודים רק בין שורות/פריטים, כדי שטקסט לא ייחתך באמצע */
+    const ends = [...st.querySelectorAll('.rp-head,h1,.rp-sub,h2,h3,p,li,tr')].map((e) => Math.ceil(e.getBoundingClientRect().bottom - top0)).sort((a, b) => a - b);
+    const H = st.offsetHeight; const cuts = [0];
+    while (H - cuts[cuts.length - 1] > PAGE) { const last = cuts[cuts.length - 1]; const fit = ends.filter((y) => y > last + 40 && y <= last + PAGE - 44); cuts.push(fit.length ? fit[fit.length - 1] + 6 : last + PAGE - 44); }
+    cuts.push(H);
+    const SC = 2; const canvas = await window.html2canvas(st, { scale: SC, backgroundColor: '#ffffff', logging: false, windowWidth: W });
+    const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4', compress: true }); const pw = doc.internal.pageSize.getWidth(); const k = pw / W;
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const y0 = cuts[i]; const h = cuts[i + 1] - y0; if (h <= 0) continue;
+      const c = document.createElement('canvas'); c.width = canvas.width; c.height = Math.round(h * SC);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(canvas, 0, Math.round(y0 * SC), canvas.width, c.height, 0, 0, c.width, c.height);
+      if (i) doc.addPage();
+      doc.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, i ? 30 : 0, pw, h * k); // עמודי המשך: שוליים עליונים
+      doc.setFontSize(8); doc.setTextColor(150); doc.text(`${i + 1} / ${cuts.length - 1}`, pw / 2, doc.internal.pageSize.getHeight() - 16, { align: 'center' });
+    }
+    return doc.output('blob');
+  } finally { st.remove(); }
+}
+function downloadBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000); }
 function sendDialog(p) {
   const A = p.answers; const wa = waPhone(A.phone); const mail = (A.email || '').trim(); const fn = esc(firstName(p.name));
-  show(`<form method="dialog" class="senddlg"><h2>שליחת התוכנית ל${fn}</h2><p class="muted">בחר/י איך לשלוח. מומלץ: לשמור כ-PDF ולצרף בוואטסאפ, וגם לשלוח את עיקרי התוכנית בהודעה.</p>
+  show(`<form method="dialog" class="senddlg"><h2>שליחת התוכנית ל${fn}</h2><p class="muted" id="pdfState">מכין את קובץ ה-PDF…</p>
   <div class="sendopts">
-   <button type="button" class="pri" data-s="pdf"><b>📄 דוח PDF מעוצב</b><span>נפתח חלון הדפסה: בוחרים "שמור כ-PDF" ומצרפים בוואטסאפ או במייל</span></button>
-   <button type="button" data-s="wa" ${wa ? '' : 'disabled'}><b>💬 וואטסאפ</b><span>${wa ? `הודעה מוכנה עם עיקרי התוכנית אל <span dir="ltr">${esc(A.phone)}</span>` : 'לא הוזן טלפון בשאלון'}</span></button>
-   <button type="button" data-s="mail" ${mail ? '' : 'disabled'}><b>✉️ מייל</b><span>${mail ? `טיוטת מייל אל <span dir="ltr">${esc(mail)}</span>` : 'לא הוזן מייל בשאלון'}</span></button>
+   <button type="button" class="pri" data-s="share" hidden><b>📤 שליחת קובץ ה-PDF</b><span>בוחרים וואטסאפ, מייל או כל אפליקציה, והקובץ כבר מצורף</span></button>
+   <button type="button" data-s="download"><b>⬇️ ייצוא קובץ PDF</b><span>הקובץ נשמר במכשיר: "${esc(pdfName(p))}"</span></button>
+   <button type="button" data-s="wa" ${wa ? '' : 'disabled'}><b>💬 וואטסאפ</b><span>${wa ? `הקובץ יורד, ונפתחת שיחה עם <span dir="ltr">${esc(A.phone)}</span> והודעה מוכנה. גוררים את הקובץ לשיחה` : 'לא הוזן טלפון בשאלון'}</span></button>
+   <button type="button" data-s="mail" ${mail ? '' : 'disabled'}><b>✉️ מייל</b><span>${mail ? `הקובץ יורד, ונפתחת טיוטה אל <span dir="ltr">${esc(mail)}</span>. מצרפים את הקובץ` : 'לא הוזן מייל בשאלון'}</span></button>
    <button type="button" data-s="copy"><b>📋 העתקת הטקסט</b><span>להדבקה בכל מקום אחר</span></button>
   </div><p class="ok" id="sendMsg" role="status"></p><div class="row"><button>סגירה</button></div></form>`, (d) => {
-    const msg = (t) => { d.querySelector('#sendMsg').textContent = t; };
-    d.querySelectorAll('[data-s]').forEach((b) => { b.onclick = () => {
+    const msg = (t) => { d.querySelector('#sendMsg').textContent = t; }; const state = d.querySelector('#pdfState');
+    let file = null; let failed = false;
+    /* הקובץ מוכן מראש, כדי שלחיצה על "שליחה" תפתח מיד את חלון השיתוף של הטלפון */
+    const ready = planPdf(p).then((blob) => {
+      file = new File([blob], pdfName(p), { type: 'application/pdf' });
+      const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+      d.querySelector('[data-s=share]').hidden = !canShare;
+      state.textContent = canShare ? 'הקובץ מוכן. הכי פשוט: "שליחת קובץ ה-PDF" ובוחרים וואטסאפ או מייל.' : 'הקובץ מוכן. מייצאים ושולחים בוואטסאפ או במייל.';
+    }).catch(() => { failed = true; state.textContent = 'לא הצלחתי להכין קובץ PDF בדפדפן הזה. "ייצוא קובץ PDF" יפתח חלון הדפסה: בוחרים "שמור כ-PDF".'; });
+    const withFile = async (b) => { if (file || failed) return; b.setAttribute('data-busy', ''); await ready; b.removeAttribute('data-busy'); };
+    d.querySelectorAll('[data-s]').forEach((b) => { b.onclick = async () => {
       const s = b.dataset.s; const text = planText(p);
-      if (s === 'pdf') { d.close(); markSent(p, 'PDF'); printReport(p); }
-      if (s === 'wa') { window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener'); markSent(p, 'וואטסאפ'); msg('נפתח וואטסאפ עם ההודעה. נשאר רק ללחוץ "שלח".'); }
-      if (s === 'mail') { location.href = `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent('התוכנית האישית שלך ל-90 יום – טייזון')}&body=${encodeURIComponent(text)}`; markSent(p, 'מייל'); msg('נפתחה טיוטת מייל. אפשר לצרף אליה גם את קובץ ה-PDF.'); }
-      if (s === 'copy') { (navigator.clipboard?.writeText(text) || Promise.reject()).then(() => msg('הטקסט הועתק.'), () => textBox('טקסט התוכנית', text, 'סמנו והעתיקו')); }
+      if (s === 'copy') { (navigator.clipboard?.writeText(text) || Promise.reject()).then(() => msg('הטקסט הועתק.'), () => textBox('טקסט התוכנית', text, 'סמנו והעתיקו')); return; }
+      const win = s === 'wa' ? window.open('', '_blank') : null; // נפתח מיד, כדי שהדפדפן לא יחסום את החלון
+      await withFile(b);
+      if (failed && s !== 'share') { win?.close(); d.close(); markSent(p, 'PDF'); printReport(p); return; }
+      if (s === 'share') {
+        try { await navigator.share({ files: [file], title: 'התוכנית האישית שלך ל-90 יום', text: `שלום ${firstName(p.name)}, מצורפת התוכנית האישית שלך ל-90 יום.` }); markSent(p, 'PDF'); msg('נשלח.'); }
+        catch (e) { if (e?.name !== 'AbortError') msg('השיתוף לא נפתח. אפשר להשתמש ב"ייצוא קובץ PDF".'); }
+        return;
+      }
+      downloadBlob(file, file.name);
+      if (s === 'download') { markSent(p, 'PDF'); msg('הקובץ נשמר בהורדות.'); }
+      if (s === 'wa') { const u = `https://wa.me/${wa}?text=${encodeURIComponent(text)}`; if (win) win.location.href = u; else window.open(u, '_blank'); markSent(p, 'וואטסאפ + PDF'); msg('הקובץ ירד ונפתח וואטסאפ. גוררים את הקובץ לשיחה ולוחצים "שלח".'); }
+      if (s === 'mail') { location.href = `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent('התוכנית האישית שלך ל-90 יום – טייזון')}&body=${encodeURIComponent(text)}`; markSent(p, 'מייל + PDF'); msg('הקובץ ירד ונפתחה טיוטת מייל. מצרפים את הקובץ ושולחים.'); }
     }; });
   });
 }
